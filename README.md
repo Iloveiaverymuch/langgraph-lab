@@ -1,10 +1,51 @@
 # langgraph-lab : Multi-Agent Patterns in LangGraph
 
-We implement here the **Supervisor pattern** in LangGraph using a Research Assistant as the driving use case. The goal is working, understood code — not boilerplate.
+Two independent implementations of the Supervisor/Worker pattern in LangGraph, each exploring a different memory mechanism. They are **not** designed to produce identical outputs — they have different worker sets and different final deliverables by design.
 
 ---
 
-## Use Case: AI Research Assistant
+## Implementations
+
+### `supervisor/` — Message-passing
+
+Workers share information exclusively through `state["messages"]`. The supervisor routes by sending the full message history to an LLM and parsing its output.
+
+**Pipeline:** `search_worker → analyst_worker → writer_worker`  
+**Final output:** structured research report (produced by `writer_worker`)  
+**Supervisor:** LLM-based router — reads message history, outputs next worker name
+
+### `blackboard/` — Blackboard memory
+
+Workers write to named typed fields in state (`findings`, `code`, `critique`). The supervisor routes by reading those fields directly — no LLM call, no message parsing required.
+
+**Pipeline:** `researcher → critic` (research/review) or `researcher → coder → critic` (code)  
+**Final output:** critic's assessment of findings or code  
+**Supervisor:** pure conditional router — reads `state["findings"]`, `state["code"]`, `state["critique"]`
+
+The blackboard pipeline ends at `critic` intentionally. The purpose of this implementation is to explore the blackboard memory pattern and validate dynamic routing across task types — not to reproduce the message-passing output shape. The two systems solve different problems with different pipelines; the memory mechanism is the architectural variable, not a drop-in replacement.
+
+---
+
+## Usage
+
+```bash
+# blackboard 5-task suite (default)
+python main.py
+
+# message-passing only
+python main.py --mode message_passing
+
+# single blackboard task
+python main.py --mode blackboard
+python main.py --mode blackboard --task "Write a retry decorator in Python"
+
+# run both on the same question (outputs will differ — see note above)
+python main.py --mode compare
+```
+
+---
+
+## Original use case (message-passing): AI Research Assistant
 
 User submits a question. A supervisor orchestrates three specialist workers:
 
@@ -59,13 +100,18 @@ class AgentState(TypedDict):
 
 ```
 langgraph-lab/
-├── main.py                  ← entry point
+├── main.py                  ← entry point, --mode selector
 ├── requirements.txt
-└── supervisor/
-    ├── __init__.py          ← exports app, AgentState
-    ├── state.py             ← AgentState schema + reducers + MAX_SEARCH_ITERATIONS
-    ├── nodes.py             ← supervisor_node + worker implementations
-    └── graph.py             ← topology definition + compile
+├── supervisor/              ← message-passing implementation
+│   ├── __init__.py
+│   ├── state.py             ← AgentState: messages + search_iterations
+│   ├── nodes.py             ← supervisor (LLM router) + search/analyst/writer workers
+│   └── graph.py             ← START → supervisor ⇢ workers → supervisor ⇢ END
+└── blackboard/              ← blackboard memory implementation
+    ├── __init__.py
+    ├── state.py             ← AgentState: typed fields (findings, code, critique)
+    ├── nodes.py             ← classifier (pre-flight) + supervisor (pure router) + researcher/coder/critic
+    └── graph.py             ← START → classifier → supervisor ⇢ workers → supervisor ⇢ END
 ```
 
 ### Graph Topology (LangGraph Mermaid output)
@@ -148,21 +194,28 @@ pip install -r requirements.txt
 export OPENAI_API_KEY=sk-...
 export TAVILY_API_KEY=tvly-...
 
-# run
+# blackboard 5-task suite (default)
 python main.py
+
+# message-passing only
+python main.py --mode message_passing
+
+# single blackboard task with custom input
+python main.py --mode blackboard --task "Write a retry decorator in Python"
 ```
 
-To change the question, edit the last line of `main.py`:
-
-```python
-run("Your question here")
-```
-
-To change the search cap:
+To change the search cap (message-passing):
 
 ```python
 # supervisor/state.py
 MAX_SEARCH_ITERATIONS = 2  # increase for deeper research
+```
+
+To change the iteration cap (blackboard):
+
+```python
+# blackboard/state.py
+MAX_ITERATIONS = 6  # hard cap across all worker calls
 ```
 
 ---
