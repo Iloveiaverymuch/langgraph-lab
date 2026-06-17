@@ -180,11 +180,3 @@ MAX_SEARCH_ITERATIONS = 2  # increase for deeper research
 [writer_worker] running | messages in state: 4
 [supervisor] step=6 | cap reached + writer done → FINISH
 ```
-
----
-
-## What's Next (W04D2 continued)
-
-- **Fix gap query reformulation** — LLM call to rewrite analyst gap into focused search query
-- **Swarm pattern** — same Research Assistant, no supervisor, workers hand off peer-to-peer
-- **Compare topologies** — Supervisor vs Swarm on same question, evaluate routing quality and output depth
