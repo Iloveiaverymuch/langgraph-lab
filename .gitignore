@@ -155,3 +155,12 @@ cython_debug/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Promptfoo eval gate (evals/)
+node_modules/
+package-lock.json
+.promptfoo/
+
+# Local eval run output
+evals/result.json
+result.json

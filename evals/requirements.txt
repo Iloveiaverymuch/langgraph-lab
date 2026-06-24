@@ -1,0 +1,3 @@
+# Eval harness deps. langchain-core (message types + token callback) is already a
+# top-level repo dep; pinned here too so the evals/ dir is self-describing.
+langchain-core>=0.3.0

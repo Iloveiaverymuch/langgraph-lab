@@ -1,0 +1,57 @@
+# =============================================================================
+# Agent Regression Sentinel — CI eval gate
+# =============================================================================
+# Blocks a PR when the supervisor's trajectory/output regresses.
+# promptfoo exits non-zero when any assertion fails -> the job fails -> (with a
+# required-status-check branch protection rule on `master`) the merge is blocked.
+#
+# DEFAULT: runs the REAL supervisor on every PR (RUN_REAL_SUPERVISOR=1).
+#   Requires repo secrets: OPENAI_API_KEY, TAVILY_API_KEY.
+# To switch to the free/deterministic fake (fast, no spend), set the repo/Actions
+# variable RUN_REAL_SUPERVISOR=0 (or remove the env line) — no code change needed.
+# =============================================================================
+
+name: eval-gate
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  agent-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r evals/requirements.txt
+
+      - name: Run eval gate
+        working-directory: evals
+        env:
+          # Real agent on every PR (default). Flip to '0' to use the free fake.
+          RUN_REAL_SUPERVISOR: ${{ vars.RUN_REAL_SUPERVISOR || '1' }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+        run: npx promptfoo@latest eval -c promptfooconfig.yaml --no-progress-bar
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-eval-results
+          path: evals/.promptfoo/output.json
+          if-no-files-found: ignore

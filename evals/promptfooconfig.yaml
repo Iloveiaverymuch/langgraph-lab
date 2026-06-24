@@ -1,0 +1,111 @@
+# =============================================================================
+# Agent Regression Sentinel — deterministic CI gate for the LangGraph supervisor
+# =============================================================================
+# Gates the supervisor on TRAJECTORY + OUTPUT, not just the final answer.
+# No LLM-as-judge yet (next milestone). Every assertion here is deterministic.
+#
+# Assertions per case:
+#   1. tools called + order   -> context.metadata.worker_sequence (ordered subsequence)
+#   2. termination / no loops -> context.metadata.terminated + step_count budget
+#   3. token budget           -> context.metadata.total_tokens ceiling
+#   4. final output contains  -> required report sections in `output`
+#
+# VERIFIED against promptfoo: in a `javascript` assert, `output` is the STRING final
+# answer; provider metadata is at `context.metadata` (NOT output.metadata).
+#
+# Run:   promptfoo eval -c evals/promptfooconfig.yaml      (from repo root)
+# View:  promptfoo view
+# =============================================================================
+
+description: "Agent Regression Sentinel — LangGraph supervisor gate"
+
+# The question is the prompt; provider reads it from vars.question.
+prompts:
+  - "{{question}}"
+
+providers:
+  - id: "file://eval_harness/provider.py"
+    label: langgraph-supervisor
+
+assertionTemplates:
+  order_check: &order_check
+    type: javascript
+    value: |
+      const m = context.metadata || {};
+      const seq = m.worker_sequence || [];
+      const need = ["search_worker", "analyst_worker", "writer_worker"];
+      let i = 0;
+      for (const w of seq) { if (w === need[i]) i++; }
+      if (i !== need.length)
+        return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };
+      return { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };
+
+  terminated_check: &terminated_check
+    type: javascript
+    value: |
+      const m = context.metadata || {};
+      if (!m.terminated)
+        return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };
+      return { pass: true, score: 1, reason: "terminated cleanly" };
+
+  budget_check: &budget_check
+    type: javascript
+    value: |
+      const m = context.metadata || {};
+      const MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)
+      // Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).
+      // 20k ceiling = ~75% headroom for longer questions / a search loop, while still
+      // catching a genuine blowup (a looping/runaway agent hits 30k+).
+      const MAX_TOKENS = 20000;
+      if ((m.step_count || 0) > MAX_STEPS)
+        return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };
+      if ((m.total_tokens || 0) > MAX_TOKENS)
+        return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };
+      return { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };
+
+defaultTest:
+  assert:
+    - *order_check
+    - *terminated_check
+    - *budget_check
+
+tests:
+  - description: "Q1 tradeoffs — canonical path + report sections"
+    vars:
+      question: "What are the key tradeoffs between LangGraph and raw agent loops?"
+    assert:
+      - type: contains
+        value: "## Key Findings"
+      - type: contains
+        value: "## Conclusion"
+
+  - description: "Q2 vector DBs — canonical path + exec summary"
+    vars:
+      question: "Summarize how vector databases work and compare Pinecone vs Weaviate"
+    assert:
+      - type: contains
+        value: "## Executive Summary"
+
+  - description: "Q3 RAG chunking strategy"
+    vars:
+      question: "Explain chunking strategies for RAG and their tradeoffs"
+
+  - description: "Q4 observability for agents"
+    vars:
+      question: "What should production observability for LLM agents capture?"
+
+  - description: "Q5 eval gate rationale"
+    vars:
+      question: "Why gate a PR on agent eval regressions?"
+
+  - description: "Q6 multi-agent vs single prompt"
+    vars:
+      question: "When does a multi-agent pipeline beat a single large prompt?"
+
+  - description: "Q7 supervisor routing"
+    vars:
+      question: "How does a supervisor route between specialist workers?"
+
+  - description: "Q8 token cost control"
+    vars:
+      question: "Strategies to control token cost in agent pipelines"
