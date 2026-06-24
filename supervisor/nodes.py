@@ -23,6 +23,7 @@ WORKERS = ["search_worker", "analyst_worker", "writer_worker"]
 # Supervisor
 # ---------------------------------------------------------------------------
 
+# Non passing CI
 SUPERVISOR_PROMPT = """You are a research supervisor coordinating a team of specialists.
 
 Workers available:
@@ -34,7 +35,7 @@ Your job is ONLY to decide who acts next. Output a single word, nothing else.
 
 Mandatory sequence:
 1. If no search_worker message exists yet → output: search_worker
-2. If search_worker has run but no analyst_worker message exists yet → output: analyst_worker
+2. If search_worker has run → output: writer_worker
 3. If analyst_worker's last message ends with NEEDS_MORE → output: search_worker
 4. If analyst_worker's last message ends with SUFFICIENT → output: writer_worker
 5. If writer_worker has produced a report → output: FINISH
