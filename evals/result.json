@@ -1,0 +1,1464 @@
+{
+  "evalId": "eval-agk-2026-06-24T13:54:13",
+  "results": {
+    "version": 3,
+    "timestamp": "2026-06-24T13:54:13.865Z",
+    "prompts": [
+      {
+        "id": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "raw": "{{question}}",
+        "label": "{{question}}",
+        "provider": "langgraph-supervisor",
+        "metrics": {
+          "score": 8,
+          "testPassCount": 8,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 27,
+          "assertFailCount": 0,
+          "totalLatencyMs": 1212465,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 97086,
+            "numRequests": 8,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "namedScoreWeights": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=12465",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "## Key Findings"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "## Conclusion"
+              }
+            }
+          ]
+        },
+        "id": "743cf584-861d-4135-bdd7-4d270436371e",
+        "latencyMs": 54762,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What are the key tradeoffs between LangGraph and raw agent loops?",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on the trade-offs between LangGraph and raw agent loops, highlighting their respective strengths, limitations, and user experiences. It also explores performance metrics, real-world use cases, user experience insights, and future trends in agent frameworks.\n\n## Key Findings\n- **LangGraph Strengths**: \n  - Ideal for complex, long-term workflows with features like state persistence, conditional branching, and visualization tools.\n  - Provides a structured approach to managing intricate decision-making processes.\n\n- **LangGraph Limitations**: \n  - Overhead for simpler tasks, leading to increased complexity and code size.\n  - Not always necessary for projects with fewer decision points or simpler workflows.\n\n- **Comparative Frameworks**: \n  - Other frameworks like AutoGen and CrewAI offer different strengths, such as conversational retries and human-like task delegation, which may be more suitable for specific applications.\n\n- **Performance Metrics**: \n  - Key metrics include task completion rates, resource efficiency, and alignment with human intentions, emphasizing the need for a balanced scorecard approach.\n\n- **Real-World Use Cases**: \n  - Applications in enterprise settings, voice agents, fraud detection, and supply chain management demonstrate the versatility of agent frameworks.\n\n- **User Experience Insights**: \n  - Systematic feedback loops and user-centric metrics are essential for aligning agent capabilities with user needs.\n\n- **Future Trends**: \n  - Integration capabilities and accessibility of agent technology are expected to expand, with a focus on user-friendly platforms and investment in AI education.\n\n## Analysis\nThe analysis reveals a nuanced landscape where LangGraph excels in managing complex workflows but may introduce unnecessary complexity for simpler tasks. The choice of framework should be guided by specific project requirements, including the complexity of workflows and the need for advanced features. Performance metrics and user experience insights are critical for evaluating the effectiveness of agent frameworks, while emerging trends indicate a shift towards more accessible and integrated solutions.\n\n## Conclusion\nSelecting between LangGraph and raw agent loops requires careful consideration of project needs, complexity, and user experience. While LangGraph offers robust capabilities for intricate workflows, simpler frameworks may be more appropriate for less complex tasks. Future developments in agent frameworks will likely enhance their usability and integration, making them more accessible to a broader range of users.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 12465
+          },
+          "tokenUsage": {
+            "total": 12465,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q1 tradeoffs — canonical path + report sections",
+          "vars": {
+            "question": "What are the key tradeoffs between LangGraph and raw agent loops?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            },
+            {
+              "type": "contains",
+              "value": "## Key Findings"
+            },
+            {
+              "type": "contains",
+              "value": "## Conclusion"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 12465,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "What are the key tradeoffs between LangGraph and raw agent loops?"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 12465,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=12469",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "contains",
+                "value": "## Executive Summary"
+              }
+            }
+          ]
+        },
+        "id": "61aa9a9f-9f8e-4061-9b4d-1110e49d69cf",
+        "latencyMs": 146075,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Summarize how vector databases work and compare Pinecone vs Weaviate",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on vector databases, specifically comparing Pinecone and Weaviate. It highlights their functionalities, cost structures, scalability, debugging capabilities, use cases, and features. The analysis aims to provide a clear understanding of each platform's strengths and weaknesses, guiding potential users in selecting the appropriate solution for their needs.\n\n## Key Findings\n- **Pinecone**:\n  - Fully managed, serverless vector database optimized for real-time applications.\n  - High-performance search capabilities with linear cost scaling.\n  - Limited debugging and observability features.\n  - Best suited for teams needing quick deployment without extensive management.\n\n- **Weaviate**:\n  - Open-source, schema-driven database that supports hybrid search.\n  - Offers flexibility in deployment (self-hosted or managed) and cost management.\n  - Enhanced debugging and observability features.\n  - Ideal for complex applications requiring diverse data handling.\n\n## Analysis\n### Cost and Scalability\n- Pinecone's costs increase linearly with data growth, which can be a disadvantage for large-scale applications. In contrast, Weaviate allows for cost optimization through self-hosting and hybrid search capabilities, which can significantly reduce query loads.\n\n### Debugging and Observability\n- Pinecone lacks detailed internal metrics, making troubleshooting challenging. Weaviate provides better transparency and control, facilitating easier debugging.\n\n### Use Cases\n- Pinecone excels in high-performance, real-time applications, while Weaviate is more suitable for complex, multi-model data applications, such as those found in medical research.\n\n### Features and Flexibility\n- Pinecone offers a simpler API with fewer configuration options, which may limit customization. Weaviate's modular design and support for various APIs enhance its adaptability for different applications.\n\n## Conclusion\nPinecone is ideal for teams seeking a managed solution for real-time applications but may face cost challenges as data scales. Weaviate offers greater flexibility and cost management options, making it better suited for complex, evolving data needs. Users should consider their specific requirements, including performance, cost, and data complexity, when choosing between the two platforms.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 12469
+          },
+          "tokenUsage": {
+            "total": 12469,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q2 vector DBs — canonical path + exec summary",
+          "vars": {
+            "question": "Summarize how vector databases work and compare Pinecone vs Weaviate"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            },
+            {
+              "type": "contains",
+              "value": "## Executive Summary"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 12469,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Summarize how vector databases work and compare Pinecone vs Weaviate"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 12469,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=12410",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "557fa400-33af-42f3-982f-954ef0af5bce",
+        "latencyMs": 102007,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Explain chunking strategies for RAG and their tradeoffs",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on chunking strategies for Retrieval-Augmented Generation (RAG) systems, focusing on their performance, trade-offs, and practical applications. Various chunking methods, including hierarchical, agentic, fixed-size, semantic, and sliding-window chunking, are evaluated for their effectiveness in enhancing retrieval quality and generation accuracy.\n\n## Key Findings\n1. **Performance Hierarchies**: Adaptive chunking strategies consistently outperform fixed-size methods in retrieval tasks, with page-level chunking achieving the highest accuracy and lowest variability.\n2. **Trade-offs**: Fine-grained chunking improves recall but increases index size and latency, while coarse chunking risks omitting relevant information.\n3. **Practical Applications**: Chunking is beneficial in educational contexts for information retention and in programming for data management.\n4. **Recommendations**: A balanced approach is essential, with page-level chunking recommended as a default strategy due to its robust performance across document types.\n\n## Analysis\n- **Effectiveness vs. Efficiency**: The findings indicate a clear trade-off between retrieval effectiveness and operational efficiency. Fine-grained chunking enhances recall but can lead to increased resource consumption, while overly coarse strategies may miss critical information.\n- **Adaptive Strategies**: Dynamic token chunking emerges as a near-optimal solution, balancing high accuracy with fewer chunks, thus mitigating resource inflation.\n- **User Experience**: The impact of chunking strategies on user experience and interaction with RAG systems remains underexplored, suggesting a need for further investigation.\n\n## Conclusion\nChunking strategies are pivotal in optimizing RAG systems, influencing both retrieval performance and generation quality. While adaptive and page-level chunking show promise, the choice of strategy should consider the specific application context, user needs, and resource constraints. Addressing gaps in empirical data and user experience will enhance the understanding and implementation of effective chunking strategies in RAG systems.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 12410
+          },
+          "tokenUsage": {
+            "total": 12410,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q3 RAG chunking strategy",
+          "vars": {
+            "question": "Explain chunking strategies for RAG and their tradeoffs"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 12410,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Explain chunking strategies for RAG and their tradeoffs"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 12410,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=13127",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "13de7eb2-90ab-46a6-ba45-74f2263bc38a",
+        "latencyMs": 195299,
+        "namedScores": {},
+        "prompt": {
+          "raw": "What should production observability for LLM agents capture?",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on production observability for Large Language Model (LLM) agents, emphasizing the critical components, challenges, and best practices necessary for effective monitoring and evaluation. As LLMs are increasingly deployed in various applications, understanding their behavior and performance in real-time is essential for maintaining operational excellence and ensuring user satisfaction.\n\n## Key Findings\n1. **Definition and Importance**: LLM observability involves monitoring model behavior in live applications, crucial for proactive issue detection and maintaining quality.\n2. **Key Components**: Essential elements include comprehensive data collection, analysis pipelines, and the generation of actionable insights.\n3. **Specific Metrics**: Important metrics to track include logging, cost and latency monitoring, and error pattern analysis.\n4. **Implementation Best Practices**: Start with basic observability, set alerts conservatively, and conduct regular reviews of metrics.\n5. **Challenges**: Key challenges include data privacy concerns, scalability, high model complexity, real-time monitoring needs, and debugging complexities.\n6. **Future Directions**: The emergence of AgentOps paradigms and centralized logging solutions is being explored to enhance observability.\n\n## Analysis\nThe findings indicate a robust understanding of the necessity for observability in LLM agents, highlighting both the technical and operational challenges faced by organizations. The complexity of LLMs, including their non-deterministic nature and the potential for performance drift, necessitates a structured approach to monitoring. The report identifies gaps in real-world case studies and challenges faced during implementation, suggesting a need for further exploration in these areas.\n\n## Conclusion\nEffective observability for LLM agents is critical for ensuring their reliability and performance in production environments. While the current understanding is comprehensive, addressing the identified gaps and challenges will be essential for organizations looking to leverage LLMs effectively. Future research and development should focus on practical implementations, case studies, and the integration of observability tools with existing systems to enhance the overall monitoring landscape for LLM applications.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 13127
+          },
+          "tokenUsage": {
+            "total": 13127,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q4 observability for agents",
+          "vars": {
+            "question": "What should production observability for LLM agents capture?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 13127,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "What should production observability for LLM agents capture?"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 13127,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=11523",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "3a2e5f1d-b07a-47af-a572-e182e4261f6a",
+        "latencyMs": 181078,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Why gate a PR on agent eval regressions?",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on the importance of gating Pull Requests (PRs) based on agent evaluation regressions. It highlights the necessity of regression gates in maintaining software quality, outlines the setup and integration of these gates within CI/CD pipelines, and discusses the metrics used for agent evaluation. Additionally, it addresses the challenges faced in regression testing and emphasizes the need for continuous improvement through stakeholder collaboration.\n\n## Key Findings\n1. **Purpose of Regression Gates**: They prevent deployments that degrade performance, ensuring user experience remains unaffected.\n2. **Integration in CI/CD**: Regression gates should be integrated into CI/CD pipelines to trigger evaluations on every PR, reporting any regressions or improvements.\n3. **Evaluation Metrics**: Key metrics include Task Success Rate, Tool Call Accuracy, and Step Efficiency, which are essential for assessing agent performance.\n4. **Human Review**: Human graders play a critical role in providing quality benchmarks, especially for complex evaluation scenarios.\n5. **Challenges in Regression Testing**:\n   - Growing test suites can become unmanageable.\n   - Balancing comprehensive coverage with execution speed is difficult.\n   - Resource constraints often lead to rushed testing processes.\n   - Maintenance of automated tests requires ongoing effort and adaptation.\n\n## Analysis\nThe findings indicate that while regression gates are crucial for maintaining software quality, their implementation is not without challenges. The growth of regression test suites can lead to inefficiencies, and balancing coverage with execution time remains a persistent issue. Resource limitations can further complicate the testing process, potentially leading to defects in production. Continuous improvement through stakeholder feedback is essential to refine regression testing practices and ensure alignment with development needs.\n\n## Conclusion\nImplementing regression gates on PRs is vital for proactive quality management in software development. However, organizations must be aware of the challenges associated with regression testing, including test suite management, resource constraints, and the need for ongoing maintenance. By fostering collaboration between stakeholders and leveraging both automated and manual testing strategies, teams can enhance their regression testing processes, ultimately leading to more reliable software deployments.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 11523
+          },
+          "tokenUsage": {
+            "total": 11523,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q5 eval gate rationale",
+          "vars": {
+            "question": "Why gate a PR on agent eval regressions?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 11523,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Why gate a PR on agent eval regressions?"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 11523,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=11827",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "c66f183f-50b3-461a-8957-3370dcda4bbf",
+        "latencyMs": 176801,
+        "namedScores": {},
+        "prompt": {
+          "raw": "When does a multi-agent pipeline beat a single large prompt?",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on the effectiveness of multi-agent systems (MAS) compared to single large prompt systems. It highlights the conditions under which multi-agent pipelines outperform single-agent approaches, particularly in complex task scenarios. The report also discusses the advantages, real-world applications, challenges, and future directions for MAS.\n\n## Key Findings\n1. **Performance Metrics**: Multi-agent systems have demonstrated superior performance in specific tasks, such as shopping-specific reasoning, with notable improvements in product selection, sentiment analysis, and multilingual query understanding.\n2. **Task Complexity**: Multi-agent systems excel in managing complex workflows by distributing tasks among specialized agents, enhancing efficiency and reducing errors.\n3. **Context Management**: Effective context handling is crucial for multi-agent systems, allowing agents to operate with minimal necessary information while avoiding context bottlenecks.\n4. **Real-World Applications**: MAS are successfully implemented in various sectors, including banking, sports analytics, manufacturing, transportation, and blockchain technologies.\n5. **Challenges**: Key challenges include optimizing task planning, managing complex contexts, and enhancing memory management within multi-agent frameworks.\n\n## Analysis\n- **Scalability and Resilience**: Multi-agent systems provide scalability and resilience, making them suitable for dynamic environments where tasks can be complex and varied.\n- **Coordination and Collaboration**: The ability of agents to communicate and collaborate effectively leads to improved problem-solving capabilities, particularly in scenarios requiring real-time decision-making.\n- **Limitations of Single-Agent Systems**: Single-agent systems may struggle with complex tasks due to increased prompt complexity, leading to potential errors and inefficiencies.\n\n## Conclusion\nMulti-agent systems offer significant advantages over single-agent systems, particularly in complex and dynamic task environments. Their ability to distribute tasks, manage context effectively, and enhance collaboration makes them a powerful tool in various applications. However, challenges remain in optimizing their performance and addressing limitations. Future research should focus on improving task planning, context management, and exploring new applications to fully leverage the potential of multi-agent systems.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 11827
+          },
+          "tokenUsage": {
+            "total": 11827,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q6 multi-agent vs single prompt",
+          "vars": {
+            "question": "When does a multi-agent pipeline beat a single large prompt?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 5,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 11827,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "When does a multi-agent pipeline beat a single large prompt?"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 11827,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=11816",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "d274ce92-1828-4661-8cf0-1f7c6ebb5994",
+        "latencyMs": 174312,
+        "namedScores": {},
+        "prompt": {
+          "raw": "How does a supervisor route between specialist workers?",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on how supervisors route tasks among specialist workers, focusing on the dynamics of supervisor-worker interactions, task management strategies, and practical applications in various contexts. The insights highlight the importance of effective communication, emotional support, and adaptive routing techniques in optimizing workforce productivity.\n\n## Key Findings\n1. **Supervisor Role**: Supervisors act as intermediaries, managing task assignments based on worker capabilities and ensuring effective communication.\n2. **Task Routing Techniques**: Supervisors utilize dynamic task decomposition, rerouting capabilities, and result synthesis to manage workflows efficiently.\n3. **Emotional Support**: Providing emotional support and engaging in direct communication enhances worker performance and job satisfaction.\n4. **Hierarchical Routing**: Multi-level decision-making processes allow for efficient task delegation based on specific domains and worker expertise.\n5. **Real-World Applications**: Examples from call centers and computer networks illustrate effective routing strategies that can be adapted to various industries.\n\n## Analysis\nThe findings indicate that effective routing between specialist workers is contingent upon the supervisor's ability to assess task requirements and worker capabilities dynamically. The use of adaptive routing techniques, such as task decomposition and failure handling, allows supervisors to maintain workflow efficiency and address challenges proactively. Emotional support and direct communication further enhance the supervisor-worker relationship, fostering a collaborative environment that can lead to improved outcomes.\n\nHowever, the findings also reveal gaps in specific methodologies and technological impacts on routing processes. The lack of empirical studies and real-world examples limits the practical applicability of the insights, suggesting a need for further exploration in these areas.\n\n## Conclusion\nSupervisors play a crucial role in routing tasks among specialist workers, employing various strategies to optimize productivity and maintain effective communication. While the current findings provide a solid foundation for understanding these dynamics, further research is needed to explore specific routing techniques, technological influences, and real-world applications. Addressing these gaps will enhance the understanding of supervisor-worker interactions and improve task management practices across industries.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 11816
+          },
+          "tokenUsage": {
+            "total": 11816,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q7 supervisor routing",
+          "vars": {
+            "question": "How does a supervisor route between specialist workers?"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 6,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 11816,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "How does a supervisor route between specialist workers?"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 11816,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {},
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "order ok: [\"search_worker\",\"analyst_worker\",\"search_worker\",\"writer_worker\"]",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "terminated cleanly",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+              }
+            },
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "steps=4 tokens=11449",
+              "assertion": {
+                "type": "javascript",
+                "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+              }
+            }
+          ]
+        },
+        "id": "faf99fc1-a470-4492-8cf8-bc58b0158d43",
+        "latencyMs": 182131,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Strategies to control token cost in agent pipelines",
+          "label": "{{question}}",
+          "config": {}
+        },
+        "promptId": "d3bcaf71c11c2678899be04d872718325f0916b3b0705e805ee29930663a42e2",
+        "promptIdx": 0,
+        "provider": {
+          "id": "file://eval_harness/provider.py",
+          "label": "langgraph-supervisor"
+        },
+        "response": {
+          "output": "## Executive Summary\nThis report synthesizes findings on strategies to control token costs in agent pipelines, emphasizing the importance of optimizing token consumption to enhance operational efficiency and reduce expenses. Key strategies identified include intent routing, prompt caching, dynamic turn limits, context hygiene, and workflow-level measurement. Additional techniques such as avoiding expensive LLM contexts and caching validated intermediate results are also discussed. The report highlights the need for quantitative analysis and case studies to validate these strategies in real-world applications.\n\n## Key Findings\n1. **Intent Routing**: Diverts simple queries from complex processing pipelines, reducing unnecessary token consumption.\n2. **Prompt Caching**: Caches static prompt components to minimize input token costs significantly.\n3. **Dynamic Turn Limits**: Implements flexible iteration caps based on success probability, optimizing resource use.\n4. **Context Hygiene**: Strips irrelevant context to lower token usage while maintaining agent performance.\n5. **Workflow-Level Measurement**: Tracks token consumption at the workflow level to identify cost drivers and set budgets.\n6. **Avoiding Expensive LLM Contexts**: Uses conventional code for non-LLM tasks to minimize token usage.\n7. **Caching Validated Intermediate Results**: Reuses previous computations to avoid redundant processing.\n\n## Analysis\nThe strategies outlined provide a comprehensive framework for managing token costs in AI agent pipelines. Each strategy addresses specific aspects of token consumption, offering a multi-faceted approach to optimization. However, the findings reveal gaps in quantitative analysis and real-world case studies that could demonstrate the effectiveness of these strategies. The lack of empirical data limits the ability to assess the true impact of these strategies on token costs and overall operational efficiency.\n\n## Conclusion\nWhile the strategies for controlling token costs in agent pipelines are well-defined and relevant, further exploration is necessary to validate their effectiveness through quantitative analysis and case studies. Addressing the identified gaps will enhance the understanding of these strategies' practical applications and long-term sustainability in dynamic AI environments. Organizations should consider implementing these strategies while also investing in research to quantify their impact and refine their approaches to token cost management.",
+          "metadata": {
+            "mode": "real",
+            "worker_sequence": [
+              "search_worker",
+              "analyst_worker",
+              "search_worker",
+              "writer_worker"
+            ],
+            "step_count": 4,
+            "terminated": true,
+            "search_iterations": 2,
+            "total_tokens": 11449
+          },
+          "tokenUsage": {
+            "total": 11449,
+            "numRequests": 1
+          },
+          "cached": false
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Q8 token cost control",
+          "vars": {
+            "question": "Strategies to control token cost in agent pipelines"
+          },
+          "assert": [
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+            },
+            {
+              "type": "javascript",
+              "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 7,
+        "tokenUsage": {
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "total": 11449,
+          "numRequests": 1,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          },
+          "assertions": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0,
+              "cacheReadInputTokens": 0,
+              "cacheCreationInputTokens": 0
+            }
+          }
+        },
+        "vars": {
+          "question": "Strategies to control token cost in agent pipelines"
+        },
+        "metadata": {
+          "mode": "real",
+          "worker_sequence": [
+            "search_worker",
+            "analyst_worker",
+            "search_worker",
+            "writer_worker"
+          ],
+          "step_count": 4,
+          "terminated": true,
+          "search_iterations": 2,
+          "total_tokens": 11449,
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 8,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 97086,
+        "numRequests": 8,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0,
+            "cacheReadInputTokens": 0,
+            "cacheCreationInputTokens": 0
+          }
+        }
+      },
+      "durationMs": 377501,
+      "evaluationDurationMs": 377501
+    }
+  },
+  "config": {
+    "tags": {},
+    "description": "Agent Regression Sentinel — LangGraph supervisor gate",
+    "prompts": [
+      "{{question}}"
+    ],
+    "providers": [
+      {
+        "id": "file://eval_harness/provider.py",
+        "label": "langgraph-supervisor"
+      }
+    ],
+    "tests": [
+      {
+        "description": "Q1 tradeoffs — canonical path + report sections",
+        "vars": {
+          "question": "What are the key tradeoffs between LangGraph and raw agent loops?"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "## Key Findings"
+          },
+          {
+            "type": "contains",
+            "value": "## Conclusion"
+          }
+        ]
+      },
+      {
+        "description": "Q2 vector DBs — canonical path + exec summary",
+        "vars": {
+          "question": "Summarize how vector databases work and compare Pinecone vs Weaviate"
+        },
+        "assert": [
+          {
+            "type": "contains",
+            "value": "## Executive Summary"
+          }
+        ]
+      },
+      {
+        "description": "Q3 RAG chunking strategy",
+        "vars": {
+          "question": "Explain chunking strategies for RAG and their tradeoffs"
+        }
+      },
+      {
+        "description": "Q4 observability for agents",
+        "vars": {
+          "question": "What should production observability for LLM agents capture?"
+        }
+      },
+      {
+        "description": "Q5 eval gate rationale",
+        "vars": {
+          "question": "Why gate a PR on agent eval regressions?"
+        }
+      },
+      {
+        "description": "Q6 multi-agent vs single prompt",
+        "vars": {
+          "question": "When does a multi-agent pipeline beat a single large prompt?"
+        }
+      },
+      {
+        "description": "Q7 supervisor routing",
+        "vars": {
+          "question": "How does a supervisor route between specialist workers?"
+        }
+      },
+      {
+        "description": "Q8 token cost control",
+        "vars": {
+          "question": "Strategies to control token cost in agent pipelines"
+        }
+      }
+    ],
+    "env": {},
+    "defaultTest": {
+      "assert": [
+        {
+          "type": "javascript",
+          "value": "const m = context.metadata || {};\nconst seq = m.worker_sequence || [];\nconst need = [\"search_worker\", \"analyst_worker\", \"writer_worker\"];\nlet i = 0;\nfor (const w of seq) { if (w === need[i]) i++; }\nif (i !== need.length)\n  return { pass: false, score: 0, reason: `bad trajectory: ${JSON.stringify(seq)}` };\nreturn { pass: true, score: 1, reason: `order ok: ${JSON.stringify(seq)}` };\n"
+        },
+        {
+          "type": "javascript",
+          "value": "const m = context.metadata || {};\nif (!m.terminated)\n  return { pass: false, score: 0, reason: `did not terminate cleanly (next!=FINISH or no report)` };\nreturn { pass: true, score: 1, reason: \"terminated cleanly\" };\n"
+        },
+        {
+          "type": "javascript",
+          "value": "const m = context.metadata || {};\nconst MAX_STEPS = 5;       // canonical=3, allow one extra search loop (+2)\n// Calibrated to real gpt-4o-mini runs: observed ~11.3k tokens/case (90,610 over 8).\n// 20k ceiling = ~75% headroom for longer questions / a search loop, while still\n// catching a genuine blowup (a looping/runaway agent hits 30k+).\nconst MAX_TOKENS = 20000;\nif ((m.step_count || 0) > MAX_STEPS)\n  return { pass: false, score: 0, reason: `step budget exceeded: ${m.step_count} > ${MAX_STEPS}` };\nif ((m.total_tokens || 0) > MAX_TOKENS)\n  return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };\nreturn { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };\n"
+        }
+      ],
+      "vars": {},
+      "options": {},
+      "metadata": {}
+    },
+    "outputPath": [
+      "result.json"
+    ],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.121.17",
+    "nodeVersion": "v24.4.1",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2026-06-24T14:00:31.730Z",
+    "evaluationCreatedAt": "2026-06-24T13:54:13.865Z"
+  },
+  "vars": [
+    "question"
+  ],
+  "runtimeOptions": {
+    "eventSource": "cli",
+    "showProgressBar": true,
+    "repeat": 1,
+    "maxConcurrency": 4,
+    "cache": true
+  }
+}
