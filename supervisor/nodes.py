@@ -23,6 +23,7 @@ WORKERS = ["search_worker", "analyst_worker", "writer_worker"]
 # Supervisor
 # ---------------------------------------------------------------------------
 
+# Non passing CI
 SUPERVISOR_PROMPT = """You are a research supervisor coordinating a team of specialists.
 
 Workers available:
