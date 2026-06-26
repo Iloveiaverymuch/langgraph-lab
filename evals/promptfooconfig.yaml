@@ -63,11 +63,39 @@ assertionTemplates:
         return { pass: false, score: 0, reason: `token budget exceeded: ${m.total_tokens} > ${MAX_TOKENS}` };
       return { pass: true, score: 1, reason: `steps=${m.step_count} tokens=${m.total_tokens}` };
 
+  # ---- LLM-as-judge (D3) ----------------------------------------------------
+  # Python asserts call the SAME judge module that calibration (D4b) uses, so the
+  # gated judge is the calibrated judge. They no-op (pass) without OPENAI_API_KEY,
+  # so deterministic/fake CI runs are unaffected.
+  faithfulness_judge: &faithfulness_judge
+    type: python
+    value: |
+      import sys, os
+      sys.path.insert(0, os.path.dirname(__file__) + "/eval_harness")
+      sys.path.insert(0, "eval_harness")
+      from judge import judge_faithfulness
+      m = context.get("metadata", {}) or {}
+      r = judge_faithfulness(output, m.get("search_findings", ""))
+      return {"pass": r["pass"], "score": r["score"], "reason": "faithfulness " + r["reason"]}
+
+  completion_judge: &completion_judge
+    type: python
+    value: |
+      import sys, os
+      sys.path.insert(0, os.path.dirname(__file__) + "/eval_harness")
+      sys.path.insert(0, "eval_harness")
+      from judge import judge_completion
+      q = (context.get("vars", {}) or {}).get("question", "")
+      r = judge_completion(output, q)
+      return {"pass": r["pass"], "score": r["score"], "reason": "completion " + r["reason"]}
+
 defaultTest:
   assert:
     - *order_check
     - *terminated_check
     - *budget_check
+    - *faithfulness_judge
+    - *completion_judge
 
 tests:
   - description: "Q1 tradeoffs — canonical path + report sections"

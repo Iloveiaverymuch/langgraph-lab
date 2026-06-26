@@ -164,3 +164,6 @@ package-lock.json
 # Local eval run output
 evals/result.json
 result.json
+
+# Calibration runtime output
+evals/calibration/calibration_history.jsonl

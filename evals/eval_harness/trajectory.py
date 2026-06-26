@@ -41,3 +41,13 @@ def final_answer(final_state: dict) -> str:
     if not msgs:
         return ""
     return getattr(msgs[-1], "content", "") or ""
+
+
+def search_findings(final_state: dict) -> str:
+    """Concatenated search_worker output — the source material the report must stay
+    faithful to. Used by the faithfulness LLM-as-judge to ground its grading."""
+    parts = []
+    for m in final_state.get("messages", []):
+        if getattr(m, "name", None) == "search_worker":
+            parts.append(getattr(m, "content", "") or "")
+    return "\n\n---\n\n".join(parts)

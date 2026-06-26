@@ -23,7 +23,7 @@ import os
 import sys
 from pathlib import Path
 
-from trajectory import worker_sequence, step_count, terminated, final_answer
+from trajectory import worker_sequence, step_count, terminated, final_answer, search_findings
 
 # Repo root = two levels up from evals/eval_harness/ . The `supervisor` package lives there.
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -92,6 +92,8 @@ def call_api(prompt: str, options=None, context=None):
             "terminated": terminated(final_state),
             "search_iterations": final_state.get("search_iterations", 0),
             "total_tokens": total_tokens,
+            # Source material for the faithfulness judge to ground its grading against.
+            "search_findings": search_findings(final_state),
         },
         "tokenUsage": {"total": total_tokens},
     }
