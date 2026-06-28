@@ -49,12 +49,18 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           # Judge (LLM-as-judge) runs on Claude Haiku — needs its own key, else judges skip.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: npx promptfoo@latest eval -c promptfooconfig.yaml --no-progress-bar
+        # Write a JSON result so the next step can print WHICH assertion blocked.
+        run: npx promptfoo@latest eval -c promptfooconfig.yaml --no-progress-bar -o output.json
+
+      - name: Report which assertion blocked (per-assertion summary)
+        if: always()   # run even when the eval step failed (that's when we most want it)
+        working-directory: evals
+        run: python3 report_failures.py output.json
 
       - name: Upload eval results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: promptfoo-eval-results
-          path: evals/.promptfoo/output.json
+          path: evals/output.json
           if-no-files-found: ignore
