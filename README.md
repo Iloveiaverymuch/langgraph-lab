@@ -75,6 +75,26 @@ The supervisor routes based on conversation history. The loop terminates either 
 
 ---
 
+## Eval Gate (CI)
+
+This repo ships an **Agent Regression Sentinel** — a Promptfoo CI gate that blocks a PR
+when the supervisor regresses, on two layers:
+
+- **Deterministic checks** — worker order, termination/no-loops, token budget, report sections.
+- **LLM-as-judge checks** (Claude Haiku, calibrated vs. human labels) — **faithfulness**
+  (no fabricated/unsupported claims) and **task completion**.
+
+Proven end-to-end on real PRs: a fabrication injected into the writer (valid structure,
+valid trajectory, in budget) was still **blocked by the faithfulness judge** — a content
+regression a plain output check could never catch. The CI log prints a per-assertion
+summary showing exactly which check blocked.
+
+See **[`evals/README.md`](evals/README.md)** for the full design, and
+**[`evals/calibration/README.md`](evals/calibration/README.md)** for the judge-calibration
+(Cohen's κ) workflow.
+
+---
+
 ## Architecture
 
 ### Core Abstractions

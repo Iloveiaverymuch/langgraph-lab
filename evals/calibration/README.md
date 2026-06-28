@@ -102,7 +102,8 @@ they no-op on keyless/fake CI runs). Because calibration runs the **same functio
 
 ## Note on environment
 
-The judge and Langfuse push need network access to OpenAI / Langfuse Cloud. Run them on
-a machine with that access (not a restricted CI sandbox). The κ math in `calibrate.py`
-is pure-Python and unit-checked (matches the textbook 0.400 example), so the calibration
-logic itself is verifiable offline.
+The judge needs network access to the Anthropic API (Claude Haiku), `capture_set.py`
+needs OpenAI + Tavily (it runs the agent), and `langfuse_push.py` needs Langfuse Cloud.
+Run them on a machine with that access (not a restricted CI sandbox). The κ math in
+`calibrate.py` is pure-Python and unit-checked (matches the textbook 0.400 example), so
+the calibration logic itself is verifiable offline.
