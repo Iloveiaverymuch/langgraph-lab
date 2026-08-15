@@ -15,6 +15,25 @@ so all knowledge of those attribute names is isolated in one adapter with a pinn
 Mechanism: LangChain `callbacks` → OTLP/HTTP → Langfuse (langgraph 0.6.11 exposes no
 native-OTel module; this is the installed-stack path, and the design is identical).
 
+## Native OTel vs. deliberate — the W07D2b decision
+
+We spiked the "native" path (`native_otel_spike.py`): enable LangSmith's OTel export
+(`LANGSMITH_OTEL_ENABLED`) and let LangChain/LangGraph auto-instrument the graph.
+Empirical result:
+
+- Native tracing is **LangSmith-cloud-first** — it posted to `api.smith.langchain.com`
+  and failed `401 Unauthorized` without a LangSmith account/key. It did **not** reuse our
+  Langfuse OTel provider; redirecting it to Langfuse needs explicit `OTEL_EXPORTER_OTLP_*`
+  config and, in this version, a LangSmith key just to switch the tracer on.
+- Its spans are framework-shaped (`RunnableSequence`, `ChatOpenAI`, chain nodes) with no
+  `sentinel.*` signals, no `git_sha`, no `run_status` — not a product signal schema.
+- Tracing failures were non-fatal; the agent completed normally.
+
+**Decision: keep deliberate OTLP.** No vendor lock-in (raw OTLP → any OTel backend), no
+mandatory LangSmith account, exact signal schema, git-pinned, explainable. Native's
+zero-code auto-capture is real, but the wrong tradeoff for a product whose value is a
+curated signal schema.
+
 ## Data flow
 
 ```
