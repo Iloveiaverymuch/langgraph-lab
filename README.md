@@ -95,6 +95,36 @@ See **[`evals/README.md`](evals/README.md)** for the full design, and
 
 ---
 
+## Observability (runtime tracing → Langfuse)
+
+The Sentinel has **two halves**. The eval gate above is the *pre-merge* half — it blocks
+bad **changes** at the door. The `observability/` package is the *post-deploy* half — it
+watches the **running** agent and surfaces drift the gate can't see (a model provider
+silently updating, latency creeping up, cost doubling, new tool errors — none of which
+open a PR, so no eval ever runs).
+
+Every LLM and tool call on the `supervisor` graph is recorded as a typed **receipt**,
+mapped to OpenTelemetry-GenAI span attributes, and shipped to **Langfuse** over OTLP —
+no edits to the agent's node code (it attaches via the `callbacks` slot).
+
+```bash
+pip install -r observability/requirements.txt
+set -a; . ./.env.local; set +a          # LANGFUSE_* + OPENAI/TAVILY keys
+
+python -m observability.smoke_test_export        # prove the Langfuse pipe (fake data)
+python -m observability.run_traced "your question"   # trace a real supervisor run
+python -m observability.replay <trace_id>        # rebuild a past run's receipts
+```
+
+Each run is pinned to its **git commit** (`sentinel.git_sha`), so a regression can be
+attributed to the change that caused it. Standard attributes use `gen_ai.*`; Sentinel
+signals use `sentinel.*`; the mapping is isolated in one adapter with a pinning test, so
+the still-experimental OTel-GenAI spec churning is a one-file change.
+
+See **[`observability/README.md`](observability/README.md)** for the full design.
+
+---
+
 ## Architecture
 
 ### Core Abstractions
