@@ -44,7 +44,12 @@ def _git_sha() -> str:
         return "unknown"
 
 
-def run_traced(question: str, user_id: str = "riadh", task_id: Optional[str] = None) -> dict:
+def run_traced(
+    question: str,
+    user_id: str = "riadh",
+    task_id: Optional[str] = None,
+    run_type: str = "production",
+) -> dict:
     # Ensure the repo root is importable (so `supervisor` resolves), like the eval harness does.
     if str(_REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(_REPO_ROOT))
@@ -88,12 +93,13 @@ def run_traced(question: str, user_id: str = "riadh", task_id: Optional[str] = N
         total_tokens=total_tokens,
         total_cost_usd=total_cost,
         latency_ms=latency_ms,
+        run_type=run_type,
     )
     trace_id = langfuse_export.export_run(run, handler.timeline)
     langfuse_export.flush()
 
     print(
-        f"\n[sentinel] task_id={task_id} | status={status} | git={git_sha} | "
+        f"\n[sentinel] task_id={task_id} | run_type={run_type} | status={status} | git={git_sha} | "
         f"llm_calls={len(handler.model_receipts)} | tool_calls={len(handler.tool_receipts)} | "
         f"tokens={total_tokens} | cost=${total_cost} | {latency_ms} ms"
     )
@@ -102,7 +108,7 @@ def run_traced(question: str, user_id: str = "riadh", task_id: Optional[str] = N
 
     if error is not None:
         raise error
-    return final_state
+    return final_state, trace_id
 
 
 if __name__ == "__main__":

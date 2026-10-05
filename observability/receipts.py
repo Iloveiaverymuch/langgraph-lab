@@ -51,3 +51,6 @@ class RunReceipt:
     total_tokens: int
     total_cost_usd: float
     latency_ms: float
+    # "production" (default) | "injection_test" — lets Langfuse separate attack
+    # traffic (W07D2) from real regression signal without a second pipeline.
+    run_type: str = "production"

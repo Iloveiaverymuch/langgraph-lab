@@ -37,6 +37,7 @@ def test_sentinel_attribute_names_are_pinned():
     assert A.S_TOOL_NAME == "sentinel.tool_name"
     assert A.S_TOOL_ERROR == "sentinel.tool_error"
     assert A.S_TOTAL_TOKENS == "sentinel.total_tokens"
+    assert A.S_RUN_TYPE == "sentinel.run_type"
 
 
 def test_model_receipt_emits_exact_key_set():
@@ -69,6 +70,21 @@ def test_tool_receipt_roundtrip():
 def test_run_receipt_roundtrip():
     r = RunReceipt("t1", "u1", "abc1234", "success", 1500, 0.0025, 9300.0)
     assert A.attributes_to_run_receipt(A.run_receipt_to_attributes(r)) == r
+    assert r.run_type == "production"  # default applies when not passed
+
+
+def test_run_receipt_roundtrip_injection_test_type():
+    r = RunReceipt("t1", "u1", "abc1234", "success", 1500, 0.0025, 9300.0, run_type="injection_test")
+    assert A.attributes_to_run_receipt(A.run_receipt_to_attributes(r)) == r
+
+
+def test_run_receipt_read_defaults_missing_run_type_to_production():
+    # Traces recorded before W07D2 have no sentinel.run_type attribute at all.
+    attrs = A.run_receipt_to_attributes(
+        RunReceipt("t1", "u1", "abc1234", "success", 1500, 0.0025, 9300.0)
+    )
+    del attrs[A.S_RUN_TYPE]
+    assert A.attributes_to_run_receipt(attrs).run_type == "production"
 
 
 if __name__ == "__main__":

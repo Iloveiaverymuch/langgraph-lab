@@ -40,6 +40,7 @@ S_LATENCY_MS = "sentinel.latency_ms"
 S_TOOL_NAME = "sentinel.tool_name"
 S_TOOL_ERROR = "sentinel.tool_error"
 S_TOTAL_TOKENS = "sentinel.total_tokens"
+S_RUN_TYPE = "sentinel.run_type"
 
 # Value used for gen_ai.system for OpenAI-backed calls.
 _OPENAI_SYSTEM = "openai"
@@ -84,6 +85,7 @@ def run_receipt_to_attributes(r: RunReceipt) -> Dict[str, Any]:
         S_TOTAL_TOKENS: r.total_tokens,
         S_COST_USD: r.total_cost_usd,
         S_LATENCY_MS: r.latency_ms,
+        S_RUN_TYPE: r.run_type,
     }
 
 
@@ -142,4 +144,7 @@ def attributes_to_run_receipt(a: Dict[str, Any]) -> RunReceipt:
         total_tokens=_as_int(a[S_TOTAL_TOKENS]),
         total_cost_usd=_as_float(a[S_COST_USD]),
         latency_ms=_as_float(a[S_LATENCY_MS]),
+        # .get with a default: old traces recorded before W07D2 have no
+        # sentinel.run_type attribute at all — treat those as "production".
+        run_type=str(a.get(S_RUN_TYPE, "production")),
     )
