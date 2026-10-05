@@ -13,6 +13,7 @@ from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 from .state import AgentState, MAX_SEARCH_ITERATIONS
+from .guard import apply_guard
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilySearchResults(max_results=5)
@@ -66,9 +67,13 @@ def supervisor_node(state: AgentState) -> dict:
     raw = response.content.strip()
     next_node = raw
 
-    if next_node not in WORKERS + ["FINISH"]:
-        print(f"[supervisor] WARNING: unexpected output '{raw}' → defaulting to FINISH")
-        next_node = "FINISH"
+    # W07D3 guard: the LLM only PROPOSES a next step; code decides (see guard.py).
+    # Replaces the old fail-open "unexpected output -> FINISH", which an attacker could
+    # trigger (or sidestep with a valid-but-premature FINISH) to end the run with no work done.
+    legal, overridden = apply_guard(next_node, state["messages"])
+    if overridden:
+        print(f"[supervisor] GUARD override: llm={raw[:40]!r} → {legal}")
+    next_node = legal
 
     print(f"[supervisor] step={step} | iterations={iterations}/{MAX_SEARCH_ITERATIONS} | routing → {next_node}")
     return {"next": next_node}
