@@ -14,6 +14,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 
 from .state import AgentState, MAX_SEARCH_ITERATIONS
 from .guard import apply_guard
+from .output_guard import sanitize_output
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilySearchResults(max_results=5)
@@ -181,3 +182,30 @@ ORIGINAL QUESTION: {query}
 
 analyst_worker = make_worker(ANALYST_PROMPT, "analyst_worker")
 writer_worker = make_worker(WRITER_PROMPT, "writer_worker")
+
+
+# ---------------------------------------------------------------------------
+# W07D3 L3 — output guard (runs once, after the supervisor says FINISH)
+# ---------------------------------------------------------------------------
+
+def output_guard_node(state: AgentState) -> dict:
+    """Deterministic last line of defence on the final report (see output_guard.py).
+
+    Contract for consumers: the deliverable is state["final_answer"] (== the last message).
+    If the guard changed anything it APPENDS a message named "output_guard" (deliberately not a
+    WORKERS name, so trajectory/termination checks are unchanged); the writer's raw message stays
+    in state as an audit record and must not be shown to users.
+    """
+    msgs = state["messages"]
+    last = msgs[-1] if msgs else None
+    if last is None or getattr(last, "name", None) != "writer_worker":
+        return {}
+    question = next((m.content for m in msgs if isinstance(m, HumanMessage)), "")
+    result = sanitize_output(last.content, question)
+    if not result.events:
+        return {"final_answer": last.content}
+    print(f"[output_guard] {len(result.events)} finding(s): {'; '.join(result.events)}")
+    return {
+        "messages": [AIMessage(content=result.text, name="output_guard")],
+        "final_answer": result.text,
+    }
