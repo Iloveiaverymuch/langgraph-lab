@@ -44,5 +44,19 @@ def neutralize_markup(text: str) -> str:
     return _TAGLIKE.sub(lambda m: f"&lt;{m.group(1)}&gt;", text or "")
 
 
+# Paired blocks that CLAIM authority: <system>...</system>, <developer>..., <instructions>... (ChatML-style
+# delimiter injection). A research question has no legitimate reason to carry one.
+_AUTHORITY_BLOCK = re.compile(
+    r"<\s*(system|assistant|developer|admin|instructions?|im_start)\b[^>]*>.*?<\s*/\s*\1\s*>",
+    re.IGNORECASE | re.DOTALL,
+)
+FORGED_REMOVED = "[removed: forged system markup]"
+
+
+def strip_authority_blocks(text: str) -> str:
+    """Remove whole <system>...</system>-style blocks (tags AND content), not just the tags."""
+    return _AUTHORITY_BLOCK.sub(FORGED_REMOVED, text or "")
+
+
 def fence_question(text: str) -> str:
     return f"{FENCE_OPEN}\n{neutralize_markup(text)}\n{FENCE_CLOSE}"
