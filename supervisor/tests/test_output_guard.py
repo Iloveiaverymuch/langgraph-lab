@@ -6,7 +6,7 @@ Run (from repo root):  python3 supervisor/tests/test_output_guard.py
   - integration: output_guard_node + graph wiring with stubbed llm; skipped automatically
     if langchain deps aren't importable (outside the .venv)
 
-Leak strings below are COPIED from the real L1 failures (injection_result_d3_l1*.json).
+Leak strings below are COPIED from the real L1 failures (evals/results/d3_l1*.json).
 """
 import importlib.util
 import os

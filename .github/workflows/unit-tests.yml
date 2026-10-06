@@ -1,0 +1,50 @@
+# =============================================================================
+# Offline unit tests — no API keys, no network, runs in seconds.
+# Covers the deterministic hardening layers (L1 transition guard, L2 input guard,
+# L3 output guard), the injection-suite detectors, and the observability adapter.
+# The paid, non-deterministic checks live in eval-gate.yml; this job is the cheap
+# safety net that runs on every PR and push.
+# =============================================================================
+
+name: unit-tests
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch: {}
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    env:
+      # Importing supervisor.nodes constructs the clients; dummy values are enough because
+      # every test stubs the LLM / Tavily. Nothing here calls out.
+      OPENAI_API_KEY: sk-dummy
+      TAVILY_API_KEY: tvly-dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r evals/requirements.txt
+          pip install -r observability/requirements.txt
+          pip install pytest pyyaml
+
+      - name: Guard layers (L1 / L2 / L3) + injection detectors
+        run: |
+          python supervisor/tests/test_guard.py
+          python supervisor/tests/test_output_guard.py
+          python supervisor/tests/test_input_guard.py
+          python evals/eval_harness/test_injection_provider.py
+
+      - name: Observability (adapter pinning, receipts, replay)
+        run: pytest observability/tests -q
