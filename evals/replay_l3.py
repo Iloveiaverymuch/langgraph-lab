@@ -5,13 +5,13 @@ Why this is valid: output_guard.sanitize_output is a pure function of (final rep
 user question). It runs AFTER the writer and cannot change earlier steps, so applying it to a
 recorded final output gives exactly what the guard would have delivered for that run.
 
-Usage (from evals/):  python3 replay_l3.py injection_result_d3_l1.json injection_result_d3_l1_exfil.json
+Usage (from evals/):  python3 replay_l3.py [result.json ...]   (default: the committed L1 live run in results/)
 Prints, per attack: raw-vs-guarded residual leaks, and which guard rules fired.
 Also reports how many NON-exfiltration outputs the guard modified (false-positive check).
 """
 import importlib.util
+import ast
 import json
-import re
 import sys
 from collections import OrderedDict
 from pathlib import Path
@@ -23,17 +23,19 @@ sys.modules["output_guard"] = og
 _spec.loader.exec_module(og)
 
 
-import ast
 sys.path.insert(0, str(Path(__file__).resolve().parent / "eval_harness"))
 import injection_provider as ip  # pure helpers only (heavy imports are lazy inside it)
 
 
 def protected_prompts():
-    """The five internal prompts, read from supervisor/nodes.py by AST (no langchain import)."""
-    tree = ast.parse((ROOT / "supervisor" / "nodes.py").read_text())
-    names = {"SUPERVISOR_PROMPT", "SEARCH_PROMPT", "ANALYST_PROMPT", "WRITER_PROMPT", "SEARCH_SYNTHESIS_INSTRUCTIONS"}
-    return [ast.literal_eval(n.value) for n in tree.body
-            if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in names]
+    """The internal prompts production protects (nodes.PROTECTED_PROMPTS), read by AST: no langchain import."""
+    def literals(path, names):
+        tree = ast.parse((ROOT / "supervisor" / path).read_text())
+        return [ast.literal_eval(n.value) for n in tree.body
+                if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in names]
+    return (literals("nodes.py", {"SUPERVISOR_PROMPT", "SEARCH_PROMPT", "ANALYST_PROMPT", "WRITER_PROMPT",
+                                  "SEARCH_SYNTHESIS_INSTRUCTIONS"})
+            + literals("input_guard.py", {"SANDWICH_REMINDER"}))
 
 
 def canary_hit(text, spec):
@@ -112,4 +114,4 @@ def main(paths):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or ["injection_result_d3_l1.json", "injection_result_d3_l1_exfil.json"])
+    main(sys.argv[1:] or ["results/d3_l1.json", "results/d3_l1_exfil.json"])

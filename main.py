@@ -50,7 +50,8 @@ def run_message_passing(question: str) -> str:
         preview = msg.content[:120].replace("\n", " ")
         print(f"[{name}]: {preview}...")
 
-    final = result["messages"][-1].content
+    # the deliverable is final_answer (set by the L3 output guard); fall back to the last message
+    final = result.get("final_answer") or result["messages"][-1].content
     print("\n--- FINAL REPORT ---")
     print(final)
     return final

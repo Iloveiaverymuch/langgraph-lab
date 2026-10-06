@@ -20,5 +20,5 @@ MAX_SEARCH_ITERATIONS = 2
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], operator.add]  # append-only reducer
     next: str                                              # supervisor's routing decision
-    final_answer: str                                      # populated by writer_worker
+    final_answer: str                                      # the deliverable: set by output_guard (L3)
     search_iterations: Annotated[int, _increment]         # incremented by search_worker, capped by supervisor

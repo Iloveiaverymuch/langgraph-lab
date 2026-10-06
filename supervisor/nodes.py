@@ -122,10 +122,12 @@ Based on the following real web search results, extract and organize the key fin
 Be specific. Preserve facts, numbers, and concrete details from the sources.
 Format: bullet points grouped by subtopic. Include source URLs inline."""
 
-def make_worker(system_prompt: str, name: str, count_search: bool = False, reminder: bool = False):
-    """Factory: all workers share the same LLM-call structure, differ only in prompt and name.
-    count_search=True increments search_iterations in state (search_worker only).
-    reminder=True appends SANDWICH_REMINDER AFTER the conversation (writer only: it produces the user-visible text).
+
+def make_worker(system_prompt: str, name: str, reminder: bool = False):
+    """Factory: workers that only call the LLM share this structure and differ in prompt and name.
+    (search_worker is hand-written: it calls Tavily first and increments search_iterations.)
+    reminder=True appends SANDWICH_REMINDER AFTER the conversation (writer only: it produces the
+    user-visible text). `and SANDWICH_REMINDER` lets evals/probe_writer_l2.py switch it off per condition.
     """
     def worker(state: AgentState) -> dict:
         print(f"[{name}] running | messages in state: {len(state['messages'])}")
@@ -135,10 +137,7 @@ def make_worker(system_prompt: str, name: str, count_search: bool = False, remin
         response = llm.invoke(messages)
         preview = response.content[:80].replace("\n", " ")
         print(f"[{name}] done | output preview: '{preview}...'")
-        update = {"messages": [AIMessage(content=response.content, name=name)]}
-        if count_search:
-            update["search_iterations"] = 1  # reducer adds this to current value
-        return update
+        return {"messages": [AIMessage(content=response.content, name=name)]}
     return worker
 
 
