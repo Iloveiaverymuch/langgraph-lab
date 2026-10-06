@@ -38,7 +38,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
-.tolles/
+.tox/
 .coverage
 .coverage.*
 .cache
@@ -167,3 +167,7 @@ result.json
 
 # Calibration runtime output
 evals/calibration/calibration_history.jsonl
+
+# Local eval run output (frozen evidence lives in evals/baselines/ and evals/results/)
+evals/injection_result*.json
+evals/output.json
