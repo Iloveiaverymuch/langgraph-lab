@@ -15,11 +15,19 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from .state import AgentState, MAX_SEARCH_ITERATIONS
 from .guard import apply_guard
 from .output_guard import sanitize_output
+from .input_guard import fence_question, FENCE_NOTICE
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilySearchResults(max_results=5)
 
 WORKERS = ["search_worker", "analyst_worker", "writer_worker"]
+
+
+def _fenced(messages: list) -> list:
+    """L2a: the user's question reaches every LLM call as fenced, escaped DATA (state is untouched).
+    Only HumanMessages are rewritten; worker output (AIMessage) passes through unchanged."""
+    return [HumanMessage(content=fence_question(m.content)) if isinstance(m, HumanMessage) else m
+            for m in messages]
 
 # ---------------------------------------------------------------------------
 # Supervisor
@@ -63,7 +71,7 @@ def supervisor_node(state: AgentState) -> dict:
         return {"next": "writer_worker"}
 
     # normal LLM routing
-    messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + state["messages"]
+    messages = [SystemMessage(content=SUPERVISOR_PROMPT + "\n\n" + FENCE_NOTICE)] + _fenced(state["messages"])
     response = llm.invoke(messages)
     raw = response.content.strip()
     next_node = raw
@@ -119,7 +127,7 @@ def make_worker(system_prompt: str, name: str, count_search: bool = False):
     """
     def worker(state: AgentState) -> dict:
         print(f"[{name}] running | messages in state: {len(state['messages'])}")
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
+        messages = [SystemMessage(content=system_prompt + "\n\n" + FENCE_NOTICE)] + _fenced(state["messages"])
         response = llm.invoke(messages)
         preview = response.content[:80].replace("\n", " ")
         print(f"[{name}] done | output preview: '{preview}...'")
@@ -167,10 +175,13 @@ def search_worker(state: AgentState) -> dict:
     # LLM synthesizes raw web content into structured findings
     synthesis_prompt = f"""{SEARCH_SYNTHESIS_INSTRUCTIONS}
 
+{FENCE_NOTICE}
+
 SEARCH RESULTS:
 {formatted}
 
-ORIGINAL QUESTION: {query}
+ORIGINAL QUESTION:
+{fence_question(query)}
 """
     response = llm.invoke([HumanMessage(content=synthesis_prompt)])
     preview = response.content[:80].replace("\n", " ")
@@ -192,7 +203,7 @@ writer_worker = make_worker(WRITER_PROMPT, "writer_worker")
 
 # Internal prompts the final report must never quote verbatim (L3b prompt-leak redaction).
 PROTECTED_PROMPTS = [
-    SUPERVISOR_PROMPT, SEARCH_PROMPT, ANALYST_PROMPT, WRITER_PROMPT, SEARCH_SYNTHESIS_INSTRUCTIONS,
+    SUPERVISOR_PROMPT, SEARCH_PROMPT, ANALYST_PROMPT, WRITER_PROMPT, SEARCH_SYNTHESIS_INSTRUCTIONS, FENCE_NOTICE,
 ]
 
 
