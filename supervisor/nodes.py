@@ -15,7 +15,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from .state import AgentState, MAX_SEARCH_ITERATIONS
 from .guard import apply_guard
 from .output_guard import sanitize_output
-from .input_guard import fence_question, FENCE_NOTICE
+from .input_guard import strip_authority_blocks, SANDWICH_REMINDER
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 tavily = TavilySearchResults(max_results=5)
@@ -23,11 +23,12 @@ tavily = TavilySearchResults(max_results=5)
 WORKERS = ["search_worker", "analyst_worker", "writer_worker"]
 
 
-def _fenced(messages: list) -> list:
-    """L2a: the user's question reaches every LLM call as fenced, escaped DATA (state is untouched).
-    Only HumanMessages are rewritten; worker output (AIMessage) passes through unchanged."""
-    return [HumanMessage(content=fence_question(m.content)) if isinstance(m, HumanMessage) else m
+def _clean(messages: list) -> list:
+    """L2: forged authority markup is removed from the user's question before ANY llm call.
+    State is untouched (append-only reducer; the audit trail keeps the raw question)."""
+    return [HumanMessage(content=strip_authority_blocks(m.content)) if isinstance(m, HumanMessage) else m
             for m in messages]
+
 
 # ---------------------------------------------------------------------------
 # Supervisor
@@ -71,7 +72,7 @@ def supervisor_node(state: AgentState) -> dict:
         return {"next": "writer_worker"}
 
     # normal LLM routing
-    messages = [SystemMessage(content=SUPERVISOR_PROMPT + "\n\n" + FENCE_NOTICE)] + _fenced(state["messages"])
+    messages = [SystemMessage(content=SUPERVISOR_PROMPT)] + _clean(state["messages"])
     response = llm.invoke(messages)
     raw = response.content.strip()
     next_node = raw
@@ -121,13 +122,16 @@ Based on the following real web search results, extract and organize the key fin
 Be specific. Preserve facts, numbers, and concrete details from the sources.
 Format: bullet points grouped by subtopic. Include source URLs inline."""
 
-def make_worker(system_prompt: str, name: str, count_search: bool = False):
+def make_worker(system_prompt: str, name: str, count_search: bool = False, reminder: bool = False):
     """Factory: all workers share the same LLM-call structure, differ only in prompt and name.
     count_search=True increments search_iterations in state (search_worker only).
+    reminder=True appends SANDWICH_REMINDER AFTER the conversation (writer only: it produces the user-visible text).
     """
     def worker(state: AgentState) -> dict:
         print(f"[{name}] running | messages in state: {len(state['messages'])}")
-        messages = [SystemMessage(content=system_prompt + "\n\n" + FENCE_NOTICE)] + _fenced(state["messages"])
+        messages = [SystemMessage(content=system_prompt)] + _clean(state["messages"])
+        if reminder and SANDWICH_REMINDER:
+            messages.append(SystemMessage(content=SANDWICH_REMINDER))
         response = llm.invoke(messages)
         preview = response.content[:80].replace("\n", " ")
         print(f"[{name}] done | output preview: '{preview}...'")
@@ -144,10 +148,10 @@ def search_worker(state: AgentState) -> dict:
     then uses LLM to synthesize raw results into structured findings.
     """
     # extract the original question from the first HumanMessage
-    query = next(
+    query = strip_authority_blocks(next(
         (m.content for m in state["messages"] if isinstance(m, HumanMessage)),
         ""
-    )
+    ))
 
     # if analyst identified a specific gap, use that as the search query instead
     analyst_messages = [
@@ -175,13 +179,10 @@ def search_worker(state: AgentState) -> dict:
     # LLM synthesizes raw web content into structured findings
     synthesis_prompt = f"""{SEARCH_SYNTHESIS_INSTRUCTIONS}
 
-{FENCE_NOTICE}
-
 SEARCH RESULTS:
 {formatted}
 
-ORIGINAL QUESTION:
-{fence_question(query)}
+ORIGINAL QUESTION: {query}
 """
     response = llm.invoke([HumanMessage(content=synthesis_prompt)])
     preview = response.content[:80].replace("\n", " ")
@@ -194,7 +195,7 @@ ORIGINAL QUESTION:
 
 
 analyst_worker = make_worker(ANALYST_PROMPT, "analyst_worker")
-writer_worker = make_worker(WRITER_PROMPT, "writer_worker")
+writer_worker = make_worker(WRITER_PROMPT, "writer_worker", reminder=True)
 
 
 # ---------------------------------------------------------------------------
@@ -203,7 +204,7 @@ writer_worker = make_worker(WRITER_PROMPT, "writer_worker")
 
 # Internal prompts the final report must never quote verbatim (L3b prompt-leak redaction).
 PROTECTED_PROMPTS = [
-    SUPERVISOR_PROMPT, SEARCH_PROMPT, ANALYST_PROMPT, WRITER_PROMPT, SEARCH_SYNTHESIS_INSTRUCTIONS, FENCE_NOTICE,
+    SUPERVISOR_PROMPT, SEARCH_PROMPT, ANALYST_PROMPT, WRITER_PROMPT, SEARCH_SYNTHESIS_INSTRUCTIONS, SANDWICH_REMINDER,
 ]
 
 
