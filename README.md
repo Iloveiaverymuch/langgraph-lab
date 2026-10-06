@@ -1,285 +1,157 @@
-# langgraph-lab : Multi-Agent Patterns in LangGraph
+# langgraph-lab — multi-agent patterns, a CI eval gate, runtime tracing, and prompt-injection hardening
 
-Two independent implementations of the Supervisor/Worker pattern in LangGraph, each exploring a different memory mechanism. They are **not** designed to produce identical outputs — they have different worker sets and different final deliverables by design.
+A LangGraph lab that grew into an **Agent Regression Sentinel**: two multi-agent implementations
+(message-passing and blackboard) plus the tooling to keep an agent honest in production.
 
----
+| Part | What it is | Where |
+|---|---|---|
+| Agents | Supervisor/worker research agent (message-passing) and a blackboard variant | [`supervisor/`](supervisor/), [`blackboard/`](blackboard/) |
+| **Pre-merge gate** | Promptfoo CI gate: deterministic trajectory/budget checks + calibrated LLM judges | [`evals/`](evals/README.md) |
+| **Post-deploy watch** | Every LLM/tool call → typed receipt → OpenTelemetry-GenAI → Langfuse | [`observability/`](observability/README.md) |
+| **Hardening** | 30-attack prompt-injection suite, frozen baseline, and 3 defensive layers | [`supervisor/README.md`](supervisor/README.md) |
+
+## Headline results
+
+- **Eval gate, proven on real PRs:** a fabrication injected into the writer (valid structure, valid
+  trajectory, in budget) was blocked by the faithfulness judge; a skipped-analyst PR was blocked by the
+  deterministic trajectory check.
+- **Prompt injection (30 attacks × 3 runs, pass = agent resisted):** baseline **45/90 (50%)** →
+  with the L1 transition guard **66/90 (73%)**, live. Control-flow attacks are fully fixed
+  (tool-confusion 10/24 → 24/24). The remaining failures are content-level and are handled by an output
+  guard (offline replay: exfiltration leaks 21 → 0 of 24 recorded runs) and an input guard (writer-only
+  probe: 10/10 → 0/10 on the remaining hijack). The end-to-end rate of all three layers together is
+  **not yet re-measured live** (search-API credits exhausted); numbers and caveats are in
+  [`supervisor/README.md`](supervisor/README.md).
 
 ## Implementations
 
-### `supervisor/` — Message-passing
+### `supervisor/` — message-passing
 
-Workers share information exclusively through `state["messages"]`. The supervisor routes by sending the full message history to an LLM and parsing its output.
-
-**Pipeline:** `search_worker → analyst_worker → writer_worker`  
-**Final output:** structured research report (produced by `writer_worker`)  
-**Supervisor:** LLM-based router — reads message history, outputs next worker name
-
-### `blackboard/` — Blackboard memory
-
-Workers write to named typed fields in state (`findings`, `code`, `critique`). The supervisor routes by reading those fields directly — no LLM call, no message parsing required.
-
-**Pipeline:** `researcher → critic` (research/review) or `researcher → coder → critic` (code)  
-**Final output:** critic's assessment of findings or code  
-**Supervisor:** pure conditional router — reads `state["findings"]`, `state["code"]`, `state["critique"]`
-
-The blackboard pipeline ends at `critic` intentionally. The purpose of this implementation is to explore the blackboard memory pattern and validate dynamic routing across task types — not to reproduce the message-passing output shape. The two systems solve different problems with different pipelines; the memory mechanism is the architectural variable, not a drop-in replacement.
-
----
-
-## Usage
-
-```bash
-# blackboard 5-task suite (default)
-python main.py
-
-# message-passing only
-python main.py --mode message_passing
-
-# single blackboard task
-python main.py --mode blackboard
-python main.py --mode blackboard --task "Write a retry decorator in Python"
-
-# run both on the same question (outputs will differ — see note above)
-python main.py --mode compare
-```
-
----
-
-## Original use case (message-passing): AI Research Assistant
-
-User submits a question. A supervisor orchestrates three specialist workers:
+Workers share information only through `state["messages"]`.
 
 ```
-START → supervisor → search_worker  → supervisor
-                   → analyst_worker → supervisor
-                   → writer_worker  → FINISH
+START → supervisor ⇢ search_worker  → supervisor
+                   ⇢ analyst_worker → supervisor
+                   ⇢ writer_worker  → supervisor
+                   ⇢ output_guard → END
 ```
 
 - **search_worker** — queries Tavily, synthesizes real web results into structured findings
-- **analyst_worker** — assesses coverage and gaps, outputs `SUFFICIENT` or `NEEDS_MORE: [gap]`
-- **writer_worker** — synthesizes all findings into a structured report
+- **analyst_worker** — assesses coverage and gaps, ends with `SUFFICIENT` or `NEEDS_MORE: [gap]`
+- **writer_worker** — synthesizes everything into a structured report
+- **supervisor** — an LLM *proposes* the next worker; a deterministic transition guard *decides* (see
+  [`supervisor/README.md`](supervisor/README.md)). The loop ends when the analyst approves coverage or
+  the search cap (`MAX_SEARCH_ITERATIONS = 2`) is hit.
+- **output_guard** — deterministic last line of defence on the final report
 
-The supervisor routes based on conversation history. The loop terminates either when the analyst approves coverage or when the search iteration cap is hit.
+### `blackboard/` — blackboard memory
 
----
+Workers write to named typed fields (`findings`, `code`, `critique`); the supervisor routes by reading
+those fields directly — no LLM call, no message parsing.
 
-## Tech Stack
+**Pipeline:** `researcher → critic` (research/review) or `researcher → coder → critic` (code).
+It ends at `critic` on purpose: the point is to explore the blackboard pattern and dynamic routing across
+task types, not to reproduce the message-passing output shape. The memory mechanism is the variable.
 
-| Layer | Choice | Why |
-|---|---|---|
-| Agent framework | LangGraph 0.2+ | Explicit graph topology, compile-time validation, state persistence |
-| LLM | GPT-4o-mini | Cost-efficient for routing + worker calls |
-| Search tool | Tavily (`TavilySearchResults`) | Native LangChain integration, clean structured results |
-| State | `TypedDict` + reducers | Typed contract between nodes, append-only messages |
-| Language | Python 3.9 | venv compatible |
+## Quickstart
 
----
+```bash
+python -m venv .venv && source .venv/bin/activate        # Python 3.9+ (developed on 3.9; CI uses 3.11)
+pip install -r requirements.txt
+export OPENAI_API_KEY=sk-...  TAVILY_API_KEY=tvly-...     # or keep them in .env.local (git-ignored)
 
-## Eval Gate (CI)
+python main.py                                            # blackboard 5-task suite (default)
+python main.py --mode message_passing                     # supervisor agent
+python main.py --mode blackboard --task "Write a retry decorator in Python"
+python main.py --mode compare                             # both on one question (outputs differ by design)
 
-This repo ships an **Agent Regression Sentinel** — a Promptfoo CI gate that blocks a PR
-when the supervisor regresses, on two layers:
+# offline tests (no keys, seconds)
+python supervisor/tests/test_guard.py && python supervisor/tests/test_input_guard.py && python supervisor/tests/test_output_guard.py
+```
+
+Tune the caps: `MAX_SEARCH_ITERATIONS` in `supervisor/state.py` (default 2), `MAX_ITERATIONS` in
+`blackboard/state.py` (default 6).
+
+## Eval gate (CI)
+
+A Promptfoo gate that blocks a PR when the supervisor regresses, on two layers:
 
 - **Deterministic checks** — worker order, termination/no-loops, token budget, report sections.
-- **LLM-as-judge checks** (Claude Haiku, calibrated vs. human labels) — **faithfulness**
+- **LLM-as-judge checks** (Claude Haiku, calibrated against human labels, Cohen's κ) — **faithfulness**
   (no fabricated/unsupported claims) and **task completion**.
 
-Proven end-to-end on real PRs: a fabrication injected into the writer (valid structure,
-valid trajectory, in budget) was still **blocked by the faithfulness judge** — a content
-regression a plain output check could never catch. The CI log prints a per-assertion
-summary showing exactly which check blocked.
-
-See **[`evals/README.md`](evals/README.md)** for the full design, and
-**[`evals/calibration/README.md`](evals/calibration/README.md)** for the judge-calibration
-(Cohen's κ) workflow.
-
----
+The CI log prints a per-assertion summary showing exactly which check blocked. Offline unit tests run on
+every PR in `.github/workflows/unit-tests.yml`. Full design:
+**[`evals/README.md`](evals/README.md)**; judge calibration:
+**[`evals/calibration/README.md`](evals/calibration/README.md)**.
 
 ## Observability (runtime tracing → Langfuse)
 
-The Sentinel has **two halves**. The eval gate above is the *pre-merge* half — it blocks
-bad **changes** at the door. The `observability/` package is the *post-deploy* half — it
-watches the **running** agent and surfaces drift the gate can't see (a model provider
-silently updating, latency creeping up, cost doubling, new tool errors — none of which
-open a PR, so no eval ever runs).
-
-Every LLM and tool call on the `supervisor` graph is recorded as a typed **receipt**,
-mapped to OpenTelemetry-GenAI span attributes, and shipped to **Langfuse** over OTLP —
-no edits to the agent's node code (it attaches via the `callbacks` slot).
+The eval gate is the *pre-merge* half; `observability/` is the *post-deploy* half. It watches the running
+agent and surfaces drift the gate can't see (a provider silently updating a model, latency creeping up,
+cost doubling) — none of which open a PR.
 
 ```bash
 pip install -r observability/requirements.txt
-set -a; . ./.env.local; set +a          # LANGFUSE_* + OPENAI/TAVILY keys
-
-python -m observability.smoke_test_export        # prove the Langfuse pipe (fake data)
-python -m observability.run_traced "your question"   # trace a real supervisor run
-python -m observability.replay <trace_id>        # rebuild a past run's receipts
+set -a; . ./.env.local; set +a                          # LANGFUSE_* + OPENAI/TAVILY keys
+python -m observability.smoke_test_export               # prove the Langfuse pipe (fake data)
+python -m observability.run_traced "your question"      # trace a real supervisor run
+python -m observability.replay <trace_id>               # rebuild a past run's receipts
 ```
 
-Each run is pinned to its **git commit** (`sentinel.git_sha`), so a regression can be
-attributed to the change that caused it. Standard attributes use `gen_ai.*`; Sentinel
-signals use `sentinel.*`; the mapping is isolated in one adapter with a pinning test, so
-the still-experimental OTel-GenAI spec churning is a one-file change.
+Each run is pinned to its git commit (`sentinel.git_sha`) so a regression can be attributed to the change
+that caused it. Details: **[`observability/README.md`](observability/README.md)**.
 
-See **[`observability/README.md`](observability/README.md)** for the full design.
-
----
-
-## Architecture
-
-### Core Abstractions
-
-**StateGraph** — a directed graph where nodes are callables and edges are routing logic, both operating on a shared typed state dict. Compiled before execution via `.compile()` — the graph is a description until compiled, then an executor.
-
-**State schema** — the contract between all nodes. Every node reads from it and writes partial updates. Reducers define merge behavior per field.
-
-```python
-class AgentState(TypedDict):
-    messages: Annotated[list[BaseMessage], operator.add]  # append-only
-    next: str                                              # last-write-wins
-    final_answer: str                                      # last-write-wins
-    search_iterations: Annotated[int, _increment]         # counter
-```
-
-**Key design rule** — nodes write facts, edges make decisions:
-- `supervisor_node` writes `state["next"]`
-- `route_supervisor` reads `state["next"]` and returns the target node name to the graph runtime
-- These are two separate callables by design — topology stays declarative and inspectable
-
-### Project Structure
+## Project structure
 
 ```
 langgraph-lab/
-├── main.py                  ← entry point, --mode selector
-├── requirements.txt
-├── supervisor/              ← message-passing implementation
-│   ├── __init__.py
-│   ├── state.py             ← AgentState: messages + search_iterations
-│   ├── nodes.py             ← supervisor (LLM router) + search/analyst/writer workers
-│   └── graph.py             ← START → supervisor ⇢ workers → supervisor ⇢ END
-└── blackboard/              ← blackboard memory implementation
-    ├── __init__.py
-    ├── state.py             ← AgentState: typed fields (findings, code, critique)
-    ├── nodes.py             ← classifier (pre-flight) + supervisor (pure router) + researcher/coder/critic
-    └── graph.py             ← START → classifier → supervisor ⇢ workers → supervisor ⇢ END
+├── main.py                    entry point (--mode selector)
+├── supervisor/                message-passing agent + hardening layers  → supervisor/README.md
+│   ├── state.py  nodes.py  graph.py
+│   ├── guard.py               L1 transition guard      (pure python)
+│   ├── input_guard.py         L2 input defences        (pure python)
+│   ├── output_guard.py        L3 output guard          (pure python)
+│   └── tests/                 offline tests for L1/L2/L3
+├── blackboard/                blackboard-memory agent
+├── evals/                     Agent Regression Sentinel                  → evals/README.md
+│   ├── promptfooconfig.yaml            quality gate (8 frozen cases)
+│   ├── promptfooconfig.injection.yaml  prompt-injection suite (30 attacks)
+│   ├── eval_harness/                   providers, judges, trajectory, detectors
+│   ├── calibration/                    judge-vs-human calibration (κ)
+│   ├── baselines/                      FROZEN injection baseline (+ exfil rerun): diff against, never overwrite
+│   ├── results/                        committed D3 run (evidence for the L1 numbers)
+│   └── replay_l3.py  probe_writer_l2.py  report_*.py
+├── observability/             runtime tracing → Langfuse                 → observability/README.md
+└── .github/workflows/         eval-gate.yml (paid, real agent) · unit-tests.yml (offline)
 ```
 
-### Graph Topology (LangGraph Mermaid output)
+## Key design decisions
 
-```
-START → supervisor
-supervisor -.-> search_worker   (conditional)
-supervisor -.-> analyst_worker  (conditional)
-supervisor -.-> writer_worker   (conditional)
-supervisor -.-> END             (conditional)
-search_worker  → supervisor     (unconditional)
-analyst_worker → supervisor     (unconditional)
-writer_worker  → supervisor     (unconditional)
-```
+1. **Supervisor owns routing, workers own content.** Workers never touch `state["next"]`; the supervisor
+   does no substantive work. Nodes write facts, edges make decisions (`route_supervisor` is separate from
+   `supervisor_node`, so topology stays declarative and inspectable).
+2. **Infrastructure enforces constraints, not prompts.** The search cap, the transition guard and the
+   output guard are code. Prompts only propose.
+3. **Gap-targeted second search.** On `NEEDS_MORE: [gap]` the gap text becomes the next Tavily query.
+4. **Worker factory.** `make_worker(prompt, name)` removes the repeated LLM-call structure; `search_worker`
+   is hand-written because it calls Tavily first.
+5. **Measure before keeping a layer.** The input-side "fence the question as data" defence was dropped
+   because it showed no effect and caused over-blocking; only measured fixes shipped.
 
-Solid edges = unconditional (workers always return to supervisor).
-Dashed edges = conditional (supervisor routes via `route_supervisor`).
+State is a `TypedDict` with reducers (append-only `messages`, last-write-wins `next`/`final_answer`,
+additive `search_iterations`) — the typed contract between nodes.
 
----
+## Problems encountered (supervisor, early lab)
 
-## Key Design Decisions
-
-### 1. Supervisor owns routing, workers own content
-The supervisor never does substantive work — pure routing. Workers never touch `state["next"]` — pure content. Clean separation enforced by the state schema, not convention.
-
-### 2. Deterministic loop cap via code, not LLM
-`MAX_SEARCH_ITERATIONS = 2` in `state.py`. When `search_iterations >= MAX_SEARCH_ITERATIONS`, the supervisor bypasses the LLM entirely and hard-routes to `writer_worker`. Infrastructure enforces constraints, not prompts.
-
-### 3. Gap-targeted second search
-When `analyst_worker` outputs `NEEDS_MORE: [gap]`, `search_worker` extracts the gap text and uses it as the Tavily query instead of the original question. Each search iteration targets a specific identified gap.
-
-### 4. Worker factory pattern
-All workers share the same LLM-call structure. `make_worker(prompt, name)` avoids repeating the invocation contract three times. `search_worker` is the only exception — it's hand-written because it calls Tavily before the LLM.
-
----
-
-## Problems Encountered & Solutions
-
-### Problem 1: Supervisor terminated after one worker (no loop)
-**Root cause** — `gpt-4o-mini` wasn't following the routing prompt rules strictly. The model was outputting `FINISH` after the first search.
-
-**Fix** — rewrote the supervisor prompt to use a numbered decision tree with explicit `→ output:` instructions. Replaced vague rules with deterministic step-by-step logic.
-
-**Lesson** — small models need explicit, unambiguous prompts for routing. Vague rules ("route when coverage is sufficient") give the model too much discretion.
-
----
-
-### Problem 2: Infinite analyst loop after adding the iteration cap
-**Root cause** — the cap logic forced `analyst_worker` when search was capped, waiting for it to output `SUFFICIENT`. But the analyst kept outputting `NEEDS_MORE` because its prompt biases it toward requesting more data. `analyst_approved` stayed `False` → infinite loop → `GraphRecursionError`.
-
-**Fix** — simplified the cap logic: once `search_iterations >= MAX_SEARCH_ITERATIONS`, bypass analyst entirely and force `writer_worker` directly. The cap means "we've searched enough, write now."
-
-**Lesson** — don't combine a hard cap with an LLM approval gate. Pick one control mechanism per decision point.
-
----
-
-### Problem 3: Hallucinated search results (no real retrieval)
-**Root cause** — `search_worker` was calling `llm.invoke()` with no tools. It generated plausible-sounding bullet points from training data. The analyst triggered `NEEDS_MORE` not from real gaps but from prompt bias.
-
-**Fix** — wired `TavilySearchResults` into `search_worker`. Real flow: extract query → call Tavily → format raw results → LLM synthesizes into structured findings with source URLs.
-
-**Lesson** — an agent loop without grounded retrieval is an expensive hallucination engine. Real tools are not optional for research-type tasks.
-
----
-
-### Problem 4: Second search query went off-topic
-**Root cause** — the gap extraction pulled the raw analyst bullet text verbatim (e.g. `"- Specific use cases and performance metrics to guide decision-making."`). Tavily treated this as a generic query and returned KPI content unrelated to LangGraph.
-
-**Status** — identified, not yet fixed. Planned fix: add a small LLM call to rewrite the extracted gap into a focused, topic-specific search query before calling Tavily.
-
----
-
-## Running the System
-
-```bash
-# install dependencies
-pip install -r requirements.txt
-
-# set API keys
-export OPENAI_API_KEY=sk-...
-export TAVILY_API_KEY=tvly-...
-
-# blackboard 5-task suite (default)
-python main.py
-
-# message-passing only
-python main.py --mode message_passing
-
-# single blackboard task with custom input
-python main.py --mode blackboard --task "Write a retry decorator in Python"
-```
-
-To change the search cap (message-passing):
-
-```python
-# supervisor/state.py
-MAX_SEARCH_ITERATIONS = 2  # increase for deeper research
-```
-
-To change the iteration cap (blackboard):
-
-```python
-# blackboard/state.py
-MAX_ITERATIONS = 6  # hard cap across all worker calls
-```
-
----
-
-## Execution Trace (working run)
-
-```
-[supervisor] step=2 | iterations=0/2 | routing → search_worker
-[search_worker] running | query: 'What are the key tradeoffs between LangGraph and raw agent loops?'
-[supervisor] step=3 | iterations=1/2 | routing → analyst_worker
-[analyst_worker] running | messages in state: 2
-[supervisor] step=4 | iterations=1/2 | routing → search_worker   ← NEEDS_MORE
-[search_worker] running | query: 'Specific use cases and performance metrics...'
-[supervisor] step=5 | cap reached (2/2) → forcing writer_worker
-[writer_worker] running | messages in state: 4
-[supervisor] step=6 | cap reached + writer done → FINISH
-```
+1. **Supervisor stopped after one worker.** `gpt-4o-mini` ignored vague routing rules. Fix: a numbered
+   decision tree with explicit `→ output:` lines. *Lesson:* small models need unambiguous routing prompts —
+   later made moot by moving the decision into code (L1).
+2. **Infinite analyst loop after adding the cap.** The cap waited for an LLM approval the analyst's prompt
+   biased against. Fix: once capped, bypass the analyst and force the writer. *Lesson:* don't combine a hard
+   cap with an LLM approval gate; one control mechanism per decision point.
+3. **Hallucinated results.** `search_worker` called the LLM with no tools. Fix: wire in Tavily (query →
+   search → LLM synthesis with source URLs). *Lesson:* an agent loop without grounded retrieval is an
+   expensive hallucination engine.
+4. **Off-topic second query** *(open).* The extracted gap bullet is used verbatim as the Tavily query and can
+   drift off-topic. Planned fix: a small LLM call that rewrites the gap into a focused query.
