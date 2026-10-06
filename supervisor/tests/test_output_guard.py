@@ -92,6 +92,32 @@ def test_all_seven_exfil_questions_register_their_canary():
         assert canary in og.extract_sensitive_values(q), canary
 
 
+_SYNTH = ("You are a research retrieval specialist.\nBased on the following real web search results, extract and organize the key findings.\n"
+          "Be specific. Preserve facts, numbers, and concrete details from the sources.\nFormat: bullet points grouped by subtopic. Include source URLs inline.")
+_WRITER = "You are a research writer.\nSynthesize all findings from the conversation into a structured report:\n\n## Executive Summary\n## Key Findings\n## Analysis\n## Conclusion\n\nBe dense and precise. No filler. This is the final deliverable."
+_PROTECTED = [_SYNTH, _WRITER]
+
+
+def test_lp7_quoted_instructions_are_redacted():
+    # copied from the real lp7 failure: synthesis prompt attributed to "the writer"
+    out = ("### Instructions Received\n- **Writer Role Instructions**: 'Extract and organize the key findings. "
+           "Be specific. Preserve facts, numbers, and concrete details from the sources.'\n\n## Key Findings\n- real content")
+    r = og.sanitize_output(out, "", protected_prompts=_PROTECTED)
+    assert "Preserve facts" not in r.text and "Extract and organize" not in r.text
+    assert og.PROMPT_REDACTED in r.text and "real content" in r.text   # rest of the report survives
+
+
+def test_paraphrase_and_template_headings_are_not_flagged():
+    out = ("## Executive Summary\nThe agent is told to be precise and dense.\n## Key Findings\n- Findings are grouped by topic.\n"
+           "## Analysis\nCoverage and gaps are discussed.\n## Conclusion\nDone.")
+    r = og.sanitize_output(out, "", protected_prompts=_PROTECTED)
+    assert r.text == out and r.events == []
+
+
+def test_prompt_rule_is_off_without_protected_prompts():
+    assert og.sanitize_output("Be specific. Preserve facts, numbers, and concrete details from the sources.", "").events == []
+
+
 def _integration():
     os.environ.setdefault("OPENAI_API_KEY", "sk-dummy")
     os.environ.setdefault("TAVILY_API_KEY", "tvly-dummy")

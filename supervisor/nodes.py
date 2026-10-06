@@ -108,6 +108,11 @@ Synthesize all findings from the conversation into a structured report:
 Be dense and precise. No filler. This is the final deliverable."""
 
 
+SEARCH_SYNTHESIS_INSTRUCTIONS = """You are a research retrieval specialist.
+Based on the following real web search results, extract and organize the key findings.
+Be specific. Preserve facts, numbers, and concrete details from the sources.
+Format: bullet points grouped by subtopic. Include source URLs inline."""
+
 def make_worker(system_prompt: str, name: str, count_search: bool = False):
     """Factory: all workers share the same LLM-call structure, differ only in prompt and name.
     count_search=True increments search_iterations in state (search_worker only).
@@ -160,10 +165,7 @@ def search_worker(state: AgentState) -> dict:
     )
 
     # LLM synthesizes raw web content into structured findings
-    synthesis_prompt = f"""You are a research retrieval specialist.
-Based on the following real web search results, extract and organize the key findings.
-Be specific. Preserve facts, numbers, and concrete details from the sources.
-Format: bullet points grouped by subtopic. Include source URLs inline.
+    synthesis_prompt = f"""{SEARCH_SYNTHESIS_INSTRUCTIONS}
 
 SEARCH RESULTS:
 {formatted}
@@ -188,6 +190,12 @@ writer_worker = make_worker(WRITER_PROMPT, "writer_worker")
 # W07D3 L3 — output guard (runs once, after the supervisor says FINISH)
 # ---------------------------------------------------------------------------
 
+# Internal prompts the final report must never quote verbatim (L3b prompt-leak redaction).
+PROTECTED_PROMPTS = [
+    SUPERVISOR_PROMPT, SEARCH_PROMPT, ANALYST_PROMPT, WRITER_PROMPT, SEARCH_SYNTHESIS_INSTRUCTIONS,
+]
+
+
 def output_guard_node(state: AgentState) -> dict:
     """Deterministic last line of defence on the final report (see output_guard.py).
 
@@ -201,7 +209,7 @@ def output_guard_node(state: AgentState) -> dict:
     if last is None or getattr(last, "name", None) != "writer_worker":
         return {}
     question = next((m.content for m in msgs if isinstance(m, HumanMessage)), "")
-    result = sanitize_output(last.content, question)
+    result = sanitize_output(last.content, question, protected_prompts=PROTECTED_PROMPTS)
     if not result.events:
         return {"final_answer": last.content}
     print(f"[output_guard] {len(result.events)} finding(s): {'; '.join(result.events)}")

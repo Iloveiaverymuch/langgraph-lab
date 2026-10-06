@@ -23,6 +23,19 @@ sys.modules["output_guard"] = og
 _spec.loader.exec_module(og)
 
 
+import ast
+sys.path.insert(0, str(Path(__file__).resolve().parent / "eval_harness"))
+import injection_provider as ip  # pure helpers only (heavy imports are lazy inside it)
+
+
+def protected_prompts():
+    """The five internal prompts, read from supervisor/nodes.py by AST (no langchain import)."""
+    tree = ast.parse((ROOT / "supervisor" / "nodes.py").read_text())
+    names = {"SUPERVISOR_PROMPT", "SEARCH_PROMPT", "ANALYST_PROMPT", "WRITER_PROMPT", "SEARCH_SYNTHESIS_INSTRUCTIONS"}
+    return [ast.literal_eval(n.value) for n in tree.body
+            if isinstance(n, ast.Assign) and getattr(n.targets[0], "id", "") in names]
+
+
 def canary_hit(text, spec):
     low = (text or "").lower()
     return any(c.strip() and c.strip().lower() in low for c in str(spec or "").split("|"))
@@ -54,31 +67,46 @@ def load(paths):
     return rows
 
 
+def leak_section(rows, prompts):
+    print("\nSYSTEM-PROMPT-LEAK family (deterministic detector incl. the NEW synthesis marker):")
+    by = OrderedDict()
+    for r in rows:
+        if r["family"] == "system_prompt_leak":
+            by.setdefault(r["desc"], []).append(r)
+    for desc, rs in by.items():
+        raw = sum(ip._prompt_leak_check(r["output"])["leaked"] for r in rs)
+        aft = sum(ip._prompt_leak_check(og.sanitize_output(r["output"], r["question"], prompts).text)["leaked"] for r in rs)
+        print(f"  {desc[:58]:58} {len(rs):>3} runs | leaked raw: {raw} | after guard: {aft}")
+
+
 def main(paths):
     rows = load(paths)
+    prompts = protected_prompts()
     by = OrderedDict()
     for r in rows:
         by.setdefault(r["desc"], []).append(r)
     print(f"{'attack':58} {'runs':>4} {'raw leak':>8} {'guarded leak':>12}  rules fired")
     tot_raw = tot_after = n_exf = 0
-    fp = []
+    fp, tp = [], []
     for desc, rs in by.items():
         raw_leaks = after_leaks = 0
         fired = set()
         for r in rs:
-            res = og.sanitize_output(r["output"], r["question"])
+            res = og.sanitize_output(r["output"], r["question"], prompts)
             rl, al = residual(r["output"], r["canary"]), residual(res.text, r["canary"])
             raw_leaks += bool(rl)
             after_leaks += bool(al)
             fired.update(e.split(" (")[0] for e in res.events)
             if r["family"] != "exfiltration" and res.events:
-                fp.append((desc, res.events))
+                (tp if ip._prompt_leak_check(r["output"])["leaked"] else fp).append((desc, res.events))
         if rs[0]["family"] == "exfiltration":
             n_exf += len(rs); tot_raw += raw_leaks; tot_after += after_leaks
             print(f"{desc[:58]:58} {len(rs):>4} {raw_leaks:>8} {after_leaks:>12}  {sorted(fired)}")
     print(f"\nEXFILTRATION total: {n_exf} recorded runs | leaked raw: {tot_raw} | leaked after guard: {tot_after}")
     non = [r for r in rows if r["family"] != "exfiltration"]
-    print(f"NON-exfiltration outputs replayed: {len(non)} | modified by guard (false positives): {len(fp)}")
+    leak_section(rows, prompts)
+    print(f"\nNON-exfiltration outputs replayed: {len(non)} | modified by guard: {len(fp) + len(tp)} "
+          f"(true positives = real prompt leaks: {len(tp)} | FALSE POSITIVES: {len(fp)})")
     for desc, ev in fp:
         print("   FP:", desc[:60], ev)
 

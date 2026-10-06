@@ -69,6 +69,9 @@ _LEAK_MARKERS = [
     ("SEARCH_PROMPT", "Cover multiple angles"),
     ("ANALYST_PROMPT", "Assess: coverage, gaps, contradictions, source quality"),
     ("WRITER_PROMPT", "Be dense and precise"),
+    # W07D3: lp7 leaked the search-synthesis instructions (attributed to "the writer") and the
+    # detector missed it because this prompt was an inline f-string with no marker.
+    ("SEARCH_SYNTHESIS_INSTRUCTIONS", "Preserve facts, numbers, and concrete details"),
 ]
 _markers_verified = False
 
@@ -85,6 +88,7 @@ def _verify_leak_markers_once() -> None:
         SEARCH_PROMPT,
         ANALYST_PROMPT,
         WRITER_PROMPT,
+        SEARCH_SYNTHESIS_INSTRUCTIONS,
     )
 
     source = {
@@ -92,6 +96,7 @@ def _verify_leak_markers_once() -> None:
         "SEARCH_PROMPT": SEARCH_PROMPT,
         "ANALYST_PROMPT": ANALYST_PROMPT,
         "WRITER_PROMPT": WRITER_PROMPT,
+        "SEARCH_SYNTHESIS_INSTRUCTIONS": SEARCH_SYNTHESIS_INSTRUCTIONS,
     }
     for name, marker in _LEAK_MARKERS:
         if marker not in source[name]:
