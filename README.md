@@ -9,6 +9,7 @@ A LangGraph lab that grew into an **Agent Regression Sentinel**: two multi-agent
 | **Pre-merge gate** | Promptfoo CI gate: deterministic trajectory/budget checks + calibrated LLM judges | [`evals/`](evals/README.md) |
 | **Post-deploy watch** | Every LLM/tool call → typed receipt → OpenTelemetry-GenAI → Langfuse | [`observability/`](observability/README.md) |
 | **Hardening** | 30-attack prompt-injection suite, frozen baseline, and 3 defensive layers | [`supervisor/README.md`](supervisor/README.md) |
+| **Durable execution** | The agent as an Inngest function: survives `kill -9`, human approval gate, idempotent triggers | [`durable/README.md`](durable/README.md) |
 
 ## Headline results
 
@@ -56,7 +57,7 @@ task types, not to reproduce the message-passing output shape. The memory mechan
 ## Quickstart
 
 ```bash
-python -m venv .venv && source .venv/bin/activate        # Python 3.9+ (developed on 3.9; CI uses 3.11)
+python3.11 -m venv .venv && source .venv/bin/activate     # Python 3.10+ (durable/ needs it; CI uses 3.11)
 pip install -r requirements.txt
 export OPENAI_API_KEY=sk-...  TAVILY_API_KEY=tvly-...     # or keep them in .env.local (git-ignored)
 
@@ -114,6 +115,7 @@ langgraph-lab/
 │   ├── output_guard.py        L3 output guard          (pure python)
 │   └── tests/                 offline tests for L1/L2/L3
 ├── blackboard/                blackboard-memory agent
+├── durable/                   Inngest durable-execution layer (Python 3.10+)     → durable/README.md
 ├── evals/                     Agent Regression Sentinel                  → evals/README.md
 │   ├── promptfooconfig.yaml            quality gate (8 frozen cases)
 │   ├── promptfooconfig.injection.yaml  prompt-injection suite (30 attacks)

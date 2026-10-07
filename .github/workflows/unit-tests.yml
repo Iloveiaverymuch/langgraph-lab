@@ -1,7 +1,8 @@
 # =============================================================================
 # Offline unit tests — no API keys, no network, runs in seconds.
 # Covers the deterministic hardening layers (L1 transition guard, L2 input guard,
-# L3 output guard), the injection-suite detectors, and the observability adapter.
+# L3 output guard), the injection-suite detectors, the observability adapter, and the
+# durable-execution layer.
 # The paid, non-deterministic checks live in eval-gate.yml; this job is the cheap
 # safety net that runs on every PR and push.
 # =============================================================================
@@ -37,6 +38,7 @@ jobs:
           pip install -r requirements.txt
           pip install -r evals/requirements.txt
           pip install -r observability/requirements.txt
+          pip install -r durable/requirements.txt
           pip install pytest pyyaml
 
       - name: Guard layers (L1 / L2 / L3) + injection detectors
@@ -48,3 +50,6 @@ jobs:
 
       - name: Observability (adapter pinning, receipts, replay)
         run: pytest observability/tests -q
+
+      - name: Durable execution (Inngest steps, approval gate, routing parity)
+        run: python durable/tests/test_workflow.py
