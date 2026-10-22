@@ -27,6 +27,7 @@ from typing import Optional
 from .receipts import RunReceipt
 from .tracing_callback import SentinelCallbackHandler
 from . import langfuse_export
+from . import store
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,9 @@ def run_traced(
 
     from langchain_core.messages import HumanMessage
     from supervisor import app  # compiled graph, untouched
+    from .demo_backends import configure_search
+
+    search_backend = configure_search()  # 'fake' only when SEARCH_BACKEND=fake (no Tavily credits)
 
     task_id = task_id or f"run-{uuid.uuid4().hex[:8]}"
     git_sha = _git_sha()
@@ -95,11 +99,17 @@ def run_traced(
         latency_ms=latency_ms,
         run_type=run_type,
     )
+    # Dual-write (W07D4b): our own store first (system of record for regression
+    # signals), then Langfuse (the trace viewer). A store failure must never break the run.
+    try:
+        store.record_run(run, handler.tool_receipts)
+    except Exception as e:  # noqa: BLE001
+        print(f"[sentinel] WARNING: receipts store write failed: {type(e).__name__}: {e}", file=sys.stderr)
     trace_id = langfuse_export.export_run(run, handler.timeline)
     langfuse_export.flush()
 
     print(
-        f"\n[sentinel] task_id={task_id} | run_type={run_type} | status={status} | git={git_sha} | "
+        f"\n[sentinel] task_id={task_id} | run_type={run_type} | search={search_backend} | status={status} | git={git_sha} | "
         f"llm_calls={len(handler.model_receipts)} | tool_calls={len(handler.tool_receipts)} | "
         f"tokens={total_tokens} | cost=${total_cost} | {latency_ms} ms"
     )
