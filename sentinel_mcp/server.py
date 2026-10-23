@@ -3,7 +3,7 @@ server.py — Agent Regression Sentinel exposed over MCP (stdio). Read-only.
 
 Tools:
   list_commits(run_type)                              -> which commits have recorded runs
-  compare_commits(baseline_sha, candidate_sha, run_type) -> 4 regression signals + verdict
+  compare_commits(baseline_sha, candidate_sha, run_type) -> 5 regression signals + verdict
 
 Security posture:
   - read-only: the receipts store is opened with SQLite mode=ro
@@ -37,8 +37,8 @@ mcp = MCPServer(
     instructions=(
         "Read-only regression signals for the LangGraph supervisor agent. "
         "Call list_commits first to find commit shas with recorded runs, then "
-        "compare_commits(baseline_sha, candidate_sha) to check cost, p95 latency, "
-        "tool errors and success rate. A verdict of insufficient_data means record more runs."
+        "compare_commits(baseline_sha, candidate_sha) to check cost, run p95 latency, "
+        "tool errors, success rate and per-tool p95 latency. A verdict of insufficient_data means record more runs."
     ),
 )
 
@@ -66,8 +66,9 @@ def list_commits(run_type: str = "production") -> signals.CommitList:
 
 @mcp.tool()
 def compare_commits(baseline_sha: str, candidate_sha: str, run_type: str = "production") -> signals.Comparison:
-    """Compare a candidate commit against a baseline commit on four regression signals:
-    cost per run, p95 latency, tool-call errors, and success rate. Returns per-signal
+    """Compare a candidate commit against a baseline commit on five regression signals:
+    cost per run, run p95 latency, tool-call errors, success rate, and per-tool p95 latency.
+    Returns per-signal
     status (ok | regression | insufficient_data) and an overall verdict."""
     conn = _open()
     try:

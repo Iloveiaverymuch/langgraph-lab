@@ -8,6 +8,11 @@ Compares a baseline commit against a candidate commit on runs of one run_type
   p95_latency   nearest-rank p95 of run ms   regression if +p95_pct %    or more
   tool_errors   tool error rate, new tools   regression if any tool newly errors, or the rate rises
   success_rate  success / total (percent)    regression if it drops success_drop_pts points or more
+  tool_latency  nearest-rank p95 per tool    regression if a tool's p95 rises tool_p95_pct % AND tool_p95_min_ms
+
+Why tool_latency exists (W07D4b drill, 2026-10-23): +12 s of injected search latency was fully
+masked at the run level because LLM calls got ~30% faster between the baseline and candidate
+days. Run-level totals hide component regressions; per-component p95 catches them.
 
 Why computed here, not by the MCP client's model: deterministic, unit-tested arithmetic,
 a few dozen bytes of output instead of thousands of span tokens, and no untrusted trace
@@ -38,10 +43,12 @@ class Thresholds:
     cost_pct: float = 20.0
     p95_pct: float = 25.0
     success_drop_pts: float = 10.0
+    tool_p95_pct: float = 25.0
+    tool_p95_min_ms: float = 100.0  # absolute floor: ignore sub-100 ms jitter on near-zero baselines
 
 
 class SignalResult(BaseModel):
-    name: Literal["cost_delta", "p95_latency", "tool_errors", "success_rate"]
+    name: Literal["cost_delta", "p95_latency", "tool_errors", "success_rate", "tool_latency"]
     status: Status
     baseline: Optional[float] = Field(None, description="baseline value, in `unit`")
     candidate: Optional[float] = Field(None, description="candidate value, in `unit`")
@@ -115,6 +122,18 @@ def _runs(conn: sqlite3.Connection, sha: str, run_type: str) -> List[sqlite3.Row
         "SELECT run_status, total_cost_usd, latency_ms FROM runs WHERE git_sha = ? AND run_type = ?",
         (sha, run_type),
     ).fetchall()
+
+
+def _tool_latencies(conn: sqlite3.Connection, sha: str, run_type: str) -> dict:
+    rows = conn.execute(
+        "SELECT t.tool_name, t.latency_ms FROM tool_calls t JOIN runs r ON r.task_id = t.task_id"
+        " WHERE r.git_sha = ? AND r.run_type = ?",
+        (sha, run_type),
+    ).fetchall()
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["tool_name"], []).append(float(r["latency_ms"]))
+    return out
 
 
 def _tool_stats(conn: sqlite3.Connection, sha: str, run_type: str) -> dict:
@@ -227,7 +246,38 @@ def compare(
         detail=f"threshold -{thresholds.success_drop_pts:g} points",
     )
 
-    signals = [cost, latency, tools, success]
+    # 5) per-tool p95 latency (catches component regressions that run totals hide)
+    bl, cl = _tool_latencies(conn, baseline_sha, run_type), _tool_latencies(conn, candidate_sha, run_type)
+    worst = None  # (abs_delta_ms, name, base_p95, cand_p95, pct)
+    regressed: List[str] = []
+    for name in sorted(set(bl) & set(cl)):
+        bp, cp = p95(bl[name]), p95(cl[name])
+        d = cp - bp
+        pct = pct_change(bp, cp)
+        if d >= thresholds.tool_p95_min_ms and (pct is None or pct >= thresholds.tool_p95_pct):
+            regressed.append(name)
+        if worst is None or d > worst[0]:
+            worst = (d, name, bp, cp, pct)
+    if worst is None:
+        tool_lat = SignalResult(
+            name="tool_latency", status=gate or "ok", baseline=None, candidate=None, delta=None,
+            unit="ms", delta_unit="ms", detail="no tool present in both commits",
+        )
+    else:
+        d, name, bp, cp, pct = worst
+        if pct is None or bp < thresholds.tool_p95_min_ms:
+            pct_txt = f"baseline under {thresholds.tool_p95_min_ms:g} ms, % not meaningful"
+        else:
+            pct_txt = f"{pct:+g}%"
+        tool_lat = SignalResult(
+            name="tool_latency",
+            status=gate or ("regression" if regressed else "ok"),
+            baseline=_r(bp, 1), candidate=_r(cp, 1), delta=_r(d, 1), unit="ms", delta_unit="ms",
+            detail=(f"largest change: {name} p95 ({pct_txt}); regressed tools: {', '.join(regressed) or 'none'}; "
+                    f"threshold +{thresholds.tool_p95_pct:g}% and +{thresholds.tool_p95_min_ms:g} ms"),
+        )
+
+    signals = [cost, latency, tools, success, tool_lat]
     verdict: Status = gate or ("regression" if any(s.status == "regression" for s in signals) else "ok")
     return Comparison(
         baseline_sha=baseline_sha, candidate_sha=candidate_sha, run_type=run_type,

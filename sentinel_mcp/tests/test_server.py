@@ -39,7 +39,7 @@ async def test_compare_returns_structured_verdict(db):
     assert not result.is_error
     sc = result.structured_content
     assert sc["verdict"] == "regression"
-    assert {s["name"] for s in sc["signals"]} == {"cost_delta", "p95_latency", "tool_errors", "success_rate"}
+    assert {s["name"] for s in sc["signals"]} == {"cost_delta", "p95_latency", "tool_errors", "success_rate", "tool_latency"}
 
 
 @pytest.mark.anyio

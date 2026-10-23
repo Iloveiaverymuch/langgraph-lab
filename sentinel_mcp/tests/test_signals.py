@@ -93,3 +93,30 @@ def test_list_commits_counts(conn):
     by = {c.git_sha: c for c in lst.commits}
     assert by[BASE].runs == 5 and by[BASE].failed_runs == 0
     assert by[CAND].runs == 5 and by[CAND].failed_runs == 2
+
+
+def test_tool_latency_regression_masked_at_run_level(tmp_path):
+    """The 2026-10-23 drill: tools +6 s, run totals flat (LLM got faster). Only tool_latency should fire."""
+    db = tmp_path / "masked.db"
+    build(db, cand_failures=0, cand_tool_errors=0, cand_latency=30000.0, cand_tool_latency=6005.0)
+    c = S.connect_ro(db)
+    try:
+        sig = _by_name(S.compare(c, BASE, CAND))
+    finally:
+        c.close()
+    assert sig["p95_latency"].status == "ok"
+    assert sig["tool_latency"].status == "regression"
+    assert sig["tool_latency"].baseline == 5.0 and sig["tool_latency"].candidate == 6005.0
+    assert "canned_search" in sig["tool_latency"].detail
+
+
+def test_tool_latency_ignores_small_absolute_jitter(tmp_path):
+    """1 ms -> 3 ms is +200% but below the 100 ms floor: not a regression."""
+    db = tmp_path / "jitter.db"
+    build(db, cand_failures=0, cand_tool_errors=0, cand_latency=30000.0, cand_tool_latency=15.0)
+    c = S.connect_ro(db)
+    try:
+        sig = _by_name(S.compare(c, BASE, CAND))
+    finally:
+        c.close()
+    assert sig["tool_latency"].status == "ok"
