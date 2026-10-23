@@ -1,8 +1,8 @@
 # =============================================================================
 # Offline unit tests — no API keys, no network, runs in seconds.
 # Covers the deterministic hardening layers (L1 transition guard, L2 input guard,
-# L3 output guard), the injection-suite detectors, the observability adapter, and the
-# durable-execution layer.
+# L3 output guard), the injection-suite detectors, the observability adapter, the
+# durable-execution layer, and the Sentinel MCP server.
 # The paid, non-deterministic checks live in eval-gate.yml; this job is the cheap
 # safety net that runs on every PR and push.
 # =============================================================================
@@ -39,6 +39,7 @@ jobs:
           pip install -r evals/requirements.txt
           pip install -r observability/requirements.txt
           pip install -r durable/requirements.txt
+          pip install -r sentinel_mcp/requirements.txt
           pip install pytest pyyaml
 
       - name: Guard layers (L1 / L2 / L3) + injection detectors
@@ -48,8 +49,11 @@ jobs:
           python supervisor/tests/test_input_guard.py
           python evals/eval_harness/test_injection_provider.py
 
-      - name: Observability (adapter pinning, receipts, replay)
+      - name: Observability (adapter pinning, receipts, replay, receipts store)
         run: pytest observability/tests -q
+
+      - name: Sentinel MCP server (signal math + in-memory MCP protocol tests)
+        run: pytest sentinel_mcp/tests -q
 
       - name: Durable execution (Inngest steps, approval gate, routing parity)
         run: python durable/tests/test_workflow.py

@@ -1,0 +1,2 @@
+# Sentinel MCP server. Official MCP Python SDK v2 (FastMCP was renamed MCPServer in 2.x).
+mcp>=2.3,<3
