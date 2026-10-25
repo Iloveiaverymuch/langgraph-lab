@@ -71,3 +71,42 @@ def test_invalid_status_is_rejected(tmp_path):
 def test_db_path_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SENTINEL_DB", str(tmp_path / "env.db"))
     assert store.default_db_path() == tmp_path / "env.db"
+
+
+# --- W3.5A D2 step 1: WAL + busy_timeout + schema init split -------------------------
+
+def test_init_schema_enables_wal_and_busy_timeout(tmp_path):
+    db = store.init_schema(tmp_path / "r.db")
+    conn = store.connect(db, init_schema=False)
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == store.BUSY_TIMEOUT_MS
+    finally:
+        conn.close()
+
+
+def test_readonly_reader_works_on_wal_db_after_writer_closed(tmp_path):
+    """The MCP server opens mode=ro. The last writer closing removes -wal/-shm: ro must still open."""
+    from sentinel_mcp.signals import connect_ro
+
+    db = tmp_path / "r.db"
+    store.record_run(_run(), [_tool()], db_path=db)  # writer opens + closes
+    ro = connect_ro(db)
+    try:
+        assert ro.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+    finally:
+        ro.close()
+
+
+def test_readonly_reader_does_not_block_writer(tmp_path):
+    from sentinel_mcp.signals import connect_ro
+
+    db = tmp_path / "r.db"
+    store.record_run(_run(), [_tool()], db_path=db)
+    ro = connect_ro(db)
+    try:
+        ro.execute("BEGIN")
+        ro.execute("SELECT COUNT(*) FROM runs").fetchone()  # open read transaction
+        assert store.record_run(_run(task_id="run-2"), [], db_path=db) is True
+    finally:
+        ro.close()

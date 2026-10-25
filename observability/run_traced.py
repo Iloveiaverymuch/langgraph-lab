@@ -27,7 +27,7 @@ from typing import Optional
 from .receipts import RunReceipt
 from .tracing_callback import SentinelCallbackHandler
 from . import langfuse_export
-from . import store
+from . import sink
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -101,17 +101,15 @@ def run_traced(
     )
     # Dual-write (W07D4b): our own store first (system of record for regression
     # signals), then Langfuse (the trace viewer). A store failure must never break the run.
-    try:
-        store.record_run(run, handler.tool_receipts)
-    except Exception as e:  # noqa: BLE001
-        print(f"[sentinel] WARNING: receipts store write failed: {type(e).__name__}: {e}", file=sys.stderr)
+    # W3.5A D2: sink = direct (in-process SQLite) or http (receipts API + spool). Never raises.
+    receipt_outcome = sink.record(run, handler.tool_receipts)
     trace_id = langfuse_export.export_run(run, handler.timeline)
     langfuse_export.flush()
 
     print(
         f"\n[sentinel] task_id={task_id} | run_type={run_type} | search={search_backend} | status={status} | git={git_sha} | "
         f"llm_calls={len(handler.model_receipts)} | tool_calls={len(handler.tool_receipts)} | "
-        f"tokens={total_tokens} | cost=${total_cost} | {latency_ms} ms"
+        f"tokens={total_tokens} | cost=${total_cost} | {latency_ms} ms | receipt={receipt_outcome}"
     )
     print(f"[sentinel] trace_id={trace_id}")
     print(f"[sentinel] replay it:  python -m observability.replay {trace_id}")

@@ -59,14 +59,78 @@ def default_db_path() -> Path:
     return Path(env) if env else _REPO_ROOT / ".sentinel" / "receipts.db"
 
 
-def connect(db_path: Optional[Union[str, Path]] = None) -> sqlite3.Connection:
+BUSY_TIMEOUT_MS = 5000  # wait up to 5 s for the single SQLite write lock instead of failing
+
+
+def connect(
+    db_path: Optional[Union[str, Path]] = None,
+    init_schema: bool = True,
+    check_same_thread: bool = True,
+) -> sqlite3.Connection:
+    """Open a read-write connection.
+
+    init_schema=False: the caller ran init_schema() once at startup (the FastAPI service).
+    check_same_thread=False: only for per-request connections that are never shared
+    (FastAPI may run a sync dependency's setup, the handler and teardown on different
+    threadpool threads).
+    """
     path = Path(db_path) if db_path else default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(SCHEMA)
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
+    if init_schema:
+        _apply_schema(conn)
     return conn
+
+
+def _apply_schema(conn: sqlite3.Connection) -> None:
+    # WAL: readers (MCP server, mode=ro) don't block the writer and vice versa.
+    # Persistent in the db file. Not supported on network filesystems.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.executescript(SCHEMA)
+
+
+def init_schema(db_path: Optional[Union[str, Path]] = None) -> Path:
+    """Create tables + enable WAL once (service startup). Returns the resolved path."""
+    path = Path(db_path) if db_path else default_db_path()
+    conn = connect(path, init_schema=True)
+    conn.close()
+    return path
+
+
+def insert_run(
+    conn: sqlite3.Connection,
+    run_row: dict,
+    tool_rows: Iterable[dict],
+    source: str = "live",
+    created_at: Optional[str] = None,
+) -> bool:
+    """Insert one run + its tool calls atomically on the CALLER's connection.
+
+    Used by the FastAPI service (per-request connection from Depends) and by record_run.
+    Returns False if task_id already exists (idempotent: existing rows untouched).
+    """
+    created_at = created_at or datetime.now(timezone.utc).isoformat()
+    with conn:  # one transaction: run + its tool calls, or nothing
+        cur = conn.execute(
+            "INSERT INTO runs (task_id, git_sha, run_status, run_type, total_tokens,"
+            " total_cost_usd, latency_ms, created_at, source) VALUES (?,?,?,?,?,?,?,?,?)"
+            # ON CONFLICT skips ONLY duplicate keys; OR IGNORE would also swallow CHECK violations.
+            " ON CONFLICT(task_id) DO NOTHING",
+            (run_row["task_id"], run_row["git_sha"], run_row["run_status"], run_row["run_type"],
+             int(run_row["total_tokens"]), float(run_row["total_cost_usd"]), float(run_row["latency_ms"]),
+             created_at, source),
+        )
+        if cur.rowcount == 0:
+            return False  # duplicate
+        conn.executemany(
+            "INSERT INTO tool_calls (task_id, tool_name, tool_error, latency_ms) VALUES (?,?,?,?)",
+            [(run_row["task_id"], t["tool_name"], int(bool(t["tool_error"])), float(t["latency_ms"]))
+             for t in tool_rows],
+        )
+    return True
 
 
 def record_run(
@@ -76,25 +140,18 @@ def record_run(
     source: str = "live",
     created_at: Optional[str] = None,
 ) -> bool:
-    """Persist one run and its tool calls atomically. Returns False if task_id already exists."""
-    created_at = created_at or datetime.now(timezone.utc).isoformat()
+    """Persist one run and its tool calls atomically (opens + closes its own connection).
+
+    Returns False if task_id already exists.
+    """
+    run_row = {
+        "task_id": run.task_id, "git_sha": run.git_sha, "run_status": run.run_status,
+        "run_type": run.run_type, "total_tokens": run.total_tokens,
+        "total_cost_usd": run.total_cost_usd, "latency_ms": run.latency_ms,
+    }
+    tool_rows = [{"tool_name": t.tool_name, "tool_error": t.tool_error, "latency_ms": t.latency_ms} for t in tools]
     conn = connect(db_path)
     try:
-        with conn:  # one transaction: run + its tool calls, or nothing
-            cur = conn.execute(
-                "INSERT INTO runs (task_id, git_sha, run_status, run_type, total_tokens,"
-                " total_cost_usd, latency_ms, created_at, source) VALUES (?,?,?,?,?,?,?,?,?)"
-                # ON CONFLICT skips ONLY duplicate keys; OR IGNORE would also swallow CHECK violations.
-                " ON CONFLICT(task_id) DO NOTHING",
-                (run.task_id, run.git_sha, run.run_status, run.run_type, int(run.total_tokens),
-                 float(run.total_cost_usd), float(run.latency_ms), created_at, source),
-            )
-            if cur.rowcount == 0:
-                return False  # duplicate: leave existing rows untouched (idempotent)
-            conn.executemany(
-                "INSERT INTO tool_calls (task_id, tool_name, tool_error, latency_ms) VALUES (?,?,?,?)",
-                [(run.task_id, t.tool_name, int(bool(t.tool_error)), float(t.latency_ms)) for t in tools],
-            )
-        return True
+        return insert_run(conn, run_row, tool_rows, source=source, created_at=created_at)
     finally:
         conn.close()
