@@ -56,7 +56,7 @@ jobs:
       - name: Sentinel MCP server (signal math + in-memory MCP protocol tests)
         run: pytest sentinel_mcp/tests -q
 
-      - name: Sentinel receipts API (POST /receipts: 201/200 idempotency, 422 contract, rollback)
+      - name: "Sentinel receipts API (POST /receipts - 201/200 idempotency, 422 contract, rollback)"
         run: pytest sentinel_api/tests -q
 
       - name: Durable execution (Inngest steps, approval gate, routing parity)
