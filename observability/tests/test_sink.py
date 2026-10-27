@@ -27,13 +27,14 @@ class FakeAPI:
     """Records POST bodies; replies with `self.status` (201 by default)."""
 
     def __init__(self):
-        self.status, self.bodies = 201, []
+        self.status, self.bodies, self.headers = 201, [], []
         api = self
 
         class H(BaseHTTPRequestHandler):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 api.bodies.append(body)
+                api.headers.append(dict(self.headers))
                 out = json.dumps({"task_id": body.get("task_id"), "created": api.status == 201}).encode()
                 self.send_response(api.status)
                 self.send_header("Content-Type", "application/json")
@@ -146,3 +147,64 @@ def test_flush_skips_when_another_process_holds_the_lock(env, monkeypatch):
     with sink._spool_lock():  # simulate a concurrent flusher
         assert sink.flush_spool()["skipped"] is True
     assert len(_spool_lines()) == 1
+
+
+# --- W3.5A D3 step 1: agent auth (bearer key from env); 401/403 are spooled, not dropped ---
+
+KEY = "test-key-not-a-secret"
+
+
+def test_bearer_header_sent_when_key_set(env, api, monkeypatch):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    monkeypatch.setenv("SENTINEL_API_KEY", KEY)
+    assert sink.record(_run(), _tools()) == "stored"
+    assert api.headers[-1].get("Authorization") == f"Bearer {KEY}"
+
+
+def test_missing_key_warns_loudly_but_never_raises(env, api, monkeypatch, capsys):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    monkeypatch.delenv("SENTINEL_API_KEY", raising=False)
+    assert sink.record(_run(), _tools()) == "stored"  # today's server has no auth yet
+    assert "Authorization" not in api.headers[-1]
+    assert "SENTINEL_API_KEY is not set" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("code", [401, 403])
+def test_auth_failure_is_spooled_and_names_the_variable_not_the_value(env, api, monkeypatch, capsys, code):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    monkeypatch.setenv("SENTINEL_API_KEY", KEY)
+    api.status = code
+    assert sink.record(_run(), _tools()) == "spooled"
+    assert len(_spool_lines()) == 1
+    err = capsys.readouterr().err
+    assert f"auth failed (HTTP {code})" in err and "SENTINEL_API_KEY" in err
+    assert KEY not in err
+    assert KEY not in sink.spool_path().read_text()  # the spool holds payloads, never credentials
+
+
+def test_flush_hitting_401_keeps_the_spool_in_order(env, api, monkeypatch):
+    monkeypatch.setenv("SENTINEL_API_URL", _dead_url())
+    sink.record(_run("run-1"), _tools("run-1"))
+    sink.record(_run("run-2"), _tools("run-2"))
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    api.status = 401
+    stats = sink.flush_spool()
+    assert (stats["sent"], stats["rejected"], stats["kept"]) == (0, 0, 2)
+    assert [json.loads(ln)["task_id"] for ln in _spool_lines()] == ["run-1", "run-2"]
+
+
+def test_wrong_key_then_fixed_key_flushes_spool_in_order(env, api, monkeypatch):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    monkeypatch.setenv("SENTINEL_API_KEY", "wrong-key")
+    api.status = 401
+    assert sink.record(_run("run-1"), _tools("run-1")) == "spooled"
+    assert sink.record(_run("run-2"), _tools("run-2")) == "spooled"
+    assert len(_spool_lines()) == 2
+
+    monkeypatch.setenv("SENTINEL_API_KEY", KEY)  # key fixed
+    api.status = 201
+    n = len(api.bodies)
+    assert sink.record(_run("run-3"), _tools("run-3")) == "stored"
+    assert [b["task_id"] for b in api.bodies[n:]] == ["run-1", "run-2", "run-3"]
+    assert all(h.get("Authorization") == f"Bearer {KEY}" for h in api.headers[n:])
+    assert _spool_lines() == []

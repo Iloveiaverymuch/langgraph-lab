@@ -4,13 +4,19 @@ sink.py — where run receipts go (W3.5A D2).
     SENTINEL_SINK=direct (default)  write to the local SQLite store in-process
     SENTINEL_SINK=http              POST to the receipts API (sentinel_api), spool on failure
     SENTINEL_API_URL                default http://127.0.0.1:8100
+    SENTINEL_API_KEY                bearer token for the receipts API (W3.5A D3); never printed
 
 Both sinks validate through observability.wire_models.RunIn first: one definition of a
 valid row, whichever path writes it.
 
 http failure policy (decided 2026-10-25, "spool"):
+Rule: spool whenever resending the SAME payload could succeed later.
   - 201/200          stored / duplicate (idempotent on task_id) -> done
-  - 4xx (not 408/429) rejected: logged, NOT spooled (a resend fails identically forever)
+  - 401/403          auth failure (W3.5A D3, decided 2026-10-27): the payload is fine, the
+                     credential is wrong and gets fixed separately -> logged loudly (names
+                     SENTINEL_API_KEY, never its value) and spooled; the fix flushes the spool
+  - other 4xx (422..) rejected: the payload is bad, a resend fails identically forever ->
+                     logged, NOT spooled
   - network / 5xx / 408 / 429  transient -> appended to .sentinel/spool.jsonl
   - the spool is flushed (in order) at the start of the next http run; resends are safe
     because the store ignores duplicate task_ids. Capped at SPOOL_MAX_LINES; overflow is
@@ -42,6 +48,8 @@ DEFAULT_API_URL = "http://127.0.0.1:8100"
 TIMEOUT_S = 2.0
 SPOOL_MAX_LINES = 10_000
 _TRANSIENT_4XX = {408, 429}
+_AUTH_4XX = {401, 403}
+API_KEY_ENV = "SENTINEL_API_KEY"
 
 
 class Rejected(Exception):
@@ -54,6 +62,14 @@ def _warn(msg: str) -> None:
 
 def api_url() -> str:
     return os.environ.get("SENTINEL_API_URL", DEFAULT_API_URL).rstrip("/")
+
+
+def api_key() -> str | None:
+    return os.environ.get(API_KEY_ENV) or None
+
+
+def _is_auth_failure(e: BaseException) -> bool:
+    return isinstance(e, urllib.error.HTTPError) and e.code in _AUTH_4XX
 
 
 def spool_path() -> Path:
@@ -79,19 +95,23 @@ def _spool_lock(blocking: bool = True) -> Iterator[bool]:
 def post(payload: str, timeout: float = TIMEOUT_S) -> bool:
     """POST one RunIn JSON. Returns created (True) / duplicate (False).
 
-    Raises Rejected on a permanent 4xx; OSError (URLError, timeout, 5xx HTTPError) on transient.
+    Raises Rejected on a permanent 4xx; OSError (URLError, timeout, 5xx / 401 / 403 HTTPError)
+    when a resend could succeed later.
     """
+    headers = {"Content-Type": "application/json"}
+    key = api_key()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
     req = urllib.request.Request(
-        f"{api_url()}/receipts", data=payload.encode("utf-8"),
-        headers={"Content-Type": "application/json"}, method="POST",
+        f"{api_url()}/receipts", data=payload.encode("utf-8"), headers=headers, method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return bool(json.loads(resp.read() or b"{}").get("created", resp.status == 201))
     except urllib.error.HTTPError as e:
-        if 400 <= e.code < 500 and e.code not in _TRANSIENT_4XX:
+        if 400 <= e.code < 500 and e.code not in _TRANSIENT_4XX | _AUTH_4XX:
             raise Rejected(f"HTTP {e.code}: {e.read()[:300]!r}") from None
-        raise  # 5xx / 408 / 429: transient (HTTPError is an OSError)
+        raise  # 5xx / 408 / 429 / 401 / 403: resend may succeed (HTTPError is an OSError)
 
 
 def _spool(payload: str) -> bool:
@@ -157,6 +177,9 @@ def record(run: RunReceipt, tools: Iterable[ToolReceipt]) -> str:
                 conn.close()
 
         if sink == "http":
+            if not api_key():
+                _warn(f"SENTINEL_SINK=http but {API_KEY_ENV} is not set: an authenticated "
+                      "receipts API will answer 401 and receipts will be spooled")
             stats = flush_spool()
             if stats["sent"] or stats["rejected"] or stats["kept"]:
                 print(f"[sentinel] spool flush: {stats}", file=sys.stderr)
@@ -167,7 +190,10 @@ def record(run: RunReceipt, tools: Iterable[ToolReceipt]) -> str:
                 _warn(f"receipts API rejected the run, not spooled: {e}")
                 return "rejected"
             except OSError as e:
-                _warn(f"receipts API unreachable ({type(e).__name__}), spooling")
+                if _is_auth_failure(e):
+                    _warn(f"auth failed (HTTP {e.code}): check {API_KEY_ENV}; spooling")
+                else:
+                    _warn(f"receipts API unreachable ({type(e).__name__}), spooling")
                 return "spooled" if _spool(payload) else "dropped"
 
         _warn(f"unknown SENTINEL_SINK={sink!r}; expected direct|http")
