@@ -215,3 +215,11 @@ def test_request_id_header_is_the_task_id(env, api, monkeypatch):
     assert sink.record(_run("run-xyz"), _tools("run-xyz")) == "stored"
     headers = {k.lower(): v for k, v in api.headers[-1].items()}  # header names are case-insensitive
     assert headers.get("x-request-id") == "run-xyz"
+
+
+def test_429_is_transient_and_spooled(env, api, monkeypatch, capsys):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    api.status = 429
+    assert sink.record(_run(), _tools()) == "spooled"
+    assert len(_spool_lines()) == 1
+    assert "rate limited" in capsys.readouterr().err

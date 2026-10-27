@@ -188,3 +188,86 @@ def test_500_is_logged_as_error_with_request_id(db, capsys):
         c.post("/receipts", json=GOOD, headers={"X-Request-ID": "req-500"})
     line = [ln for ln in log_lines(capsys) if ln["event"] == "request"][-1]
     assert (line["status"], line["level"], line["request_id"]) == (500, "ERROR", "req-500")
+
+
+# --- W3.5A D3 step 4: per-key token bucket ---
+
+from sentinel_api.ratelimit import TokenBucketLimiter  # noqa: E402
+
+
+class FakeClock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def _payload(i):
+    return {**GOOD, "task_id": f"run-rl-{i}"}
+
+
+@pytest.fixture
+def tight(client):
+    """burst 2, 1 token/s, frozen clock."""
+    clock = FakeClock()
+    client.app.state.limiter = TokenBucketLimiter(rate=1, burst=2, clock=clock)
+    return clock
+
+
+def test_burst_then_429_with_retry_after_and_log_line(client, tight, capsys):
+    codes = [client.post("/receipts", json=_payload(i)).status_code for i in range(3)]
+    assert codes == [201, 201, 429]
+    r = client.post("/receipts", json=_payload(9))
+    assert r.status_code == 429 and r.headers["retry-after"] == "1"
+    line = [ln for ln in log_lines(capsys) if ln["event"] == "request"][-1]
+    assert (line["status"], line["level"]) == (429, "WARNING")
+    assert line["key_id"] == hashlib.sha256(NEW_KEY.encode()).hexdigest()[:8]  # who is flooding
+    assert "task_id" not in line  # limited before the body was used
+
+
+def test_tokens_refill_with_time(client, tight):
+    for i in range(2):
+        client.post("/receipts", json=_payload(i))
+    assert client.post("/receipts", json=_payload(2)).status_code == 429
+    tight.t += 1.0
+    assert client.post("/receipts", json=_payload(3)).status_code == 201
+
+
+def test_each_key_has_its_own_bucket(client, tight):
+    for i in range(2):
+        client.post("/receipts", json=_payload(i))
+    assert client.post("/receipts", json=_payload(2)).status_code == 429
+    other = {"Authorization": f"Bearer {OLD_KEY}"}
+    assert client.post("/receipts", json=_payload(3), headers=other).status_code == 201
+
+
+def test_401s_spend_no_token(client, tight):
+    bad = {"Authorization": "Bearer wrong-key"}
+    assert all(client.post("/receipts", json=GOOD, headers=bad).status_code == 401 for _ in range(5))
+    assert [client.post("/receipts", json=_payload(i)).status_code for i in range(2)] == [201, 201]
+
+
+def test_limiter_math():
+    clock = FakeClock()
+    lim = TokenBucketLimiter(rate=2, burst=1, clock=clock)
+    assert lim.acquire("k") == 0.0
+    assert lim.acquire("k") == pytest.approx(0.5)  # 1 token at 2/s
+    clock.t += 0.25
+    assert lim.acquire("k") == pytest.approx(0.25)
+    clock.t += 10
+    assert lim.acquire("k") == 0.0  # refill capped at burst, not 20 tokens
+    assert lim.acquire("k") > 0
+
+
+@pytest.mark.parametrize("rate,burst", [("0", "50"), ("abc", "50"), ("10", "0")])
+def test_invalid_rate_config_refuses_to_start(db, monkeypatch, rate, burst):
+    monkeypatch.setenv("SENTINEL_RATE_PER_S", rate)
+    monkeypatch.setenv("SENTINEL_RATE_BURST", burst)
+    with pytest.raises(RuntimeError, match="invalid rate limit config"):
+        with TestClient(app):
+            pass
+
+
+def test_openapi_declares_429(client):
+    assert "429" in client.get("/openapi.json").json()["paths"]["/receipts"]["post"]["responses"]

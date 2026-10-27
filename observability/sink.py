@@ -195,6 +195,8 @@ def record(run: RunReceipt, tools: Iterable[ToolReceipt]) -> str:
             except OSError as e:
                 if _is_auth_failure(e):
                     _warn(f"auth failed (HTTP {e.code}): check {API_KEY_ENV}; spooling")
+                elif isinstance(e, urllib.error.HTTPError) and e.code == 429:
+                    _warn("rate limited by the receipts API (HTTP 429); spooling")
                 else:
                     _warn(f"receipts API unreachable ({type(e).__name__}), spooling")
                 return "spooled" if _spool(payload) else "dropped"
