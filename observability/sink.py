@@ -99,6 +99,9 @@ def post(payload: str, timeout: float = TIMEOUT_S) -> bool:
     when a resend could succeed later.
     """
     headers = {"Content-Type": "application/json"}
+    task_id = json.loads(payload).get("task_id")
+    if task_id:
+        headers["X-Request-ID"] = task_id  # one id across agent run, API log line, store row
     key = api_key()
     if key:
         headers["Authorization"] = f"Bearer {key}"

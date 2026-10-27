@@ -2,7 +2,7 @@
 sentinel_api/app.py — Sentinel receipts ingestion service (W3.5A D2).
 
     SENTINEL_API_KEYS=<k1>[,<k2>] SENTINEL_DB=.sentinel/receipts.db \
-        uvicorn sentinel_api.app:app --port 8100
+        uvicorn sentinel_api.app:app --port 8100 --no-access-log
 
 The service OWNS the receipts store: agents POST one run (+ its tool calls) per request.
 Design (see claude/sprint/w07.5a-d1-fastapi-notes.md):
@@ -21,11 +21,15 @@ Design (see claude/sprint/w07.5a-d1-fastapi-notes.md):
     before body validation and before the DB connection: an unauthenticated caller gets
     401, never a 422 that describes the schema. /health stays open (liveness probe).
     JWT deferred until there is a real issuer (W08).
-  - Rate limiting / logging: W3.5A D3 next steps.
+  - Logging (W3.5A D3 step 3): one JSON canonical line per request (sentinel_api/logs.py),
+    allowlisted fields only; X-Request-ID accepted/generated and echoed (the agent sends
+    its task_id). --no-access-log avoids double lines.
+  - Rate limiting: W3.5A D3 next step.
 """
 import hmac
 import os
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from typing import Iterator, Optional
 
@@ -35,6 +39,8 @@ from pydantic import BaseModel
 
 from observability import store
 from observability.wire_models import RunIn
+
+from . import logs
 
 
 API_KEYS_ENV = "SENTINEL_API_KEYS"
@@ -50,6 +56,7 @@ def load_api_keys() -> frozenset:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logs.configure(os.environ.get("SENTINEL_LOG_LEVEL", "INFO"))
     app.state.api_keys = load_api_keys()  # before anything else: no keys, no service
     # Schema + WAL once at startup; per-request connections skip it.
     app.state.db_path = store.init_schema(store.default_db_path())
@@ -57,6 +64,32 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Sentinel receipts API", version="0.1.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def canonical_log_line(request: Request, call_next):
+    """One JSON line per request. request.state carries task_id/key_id back from the
+    endpoint (the state dict lives in the ASGI scope, shared with the endpoint)."""
+    rid = logs.request_id_from(request.headers.get("x-request-id"))
+    token = logs.request_id_var.set(rid)
+    start = time.perf_counter()
+    status = 500  # if the endpoint raises, call_next re-raises: logged as 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Request-ID"] = rid
+        return response
+    finally:
+        extra = {
+            "method": request.method, "path": request.url.path, "status": status,
+            "latency_ms": round((time.perf_counter() - start) * 1000, 1),
+        }
+        for field in ("task_id", "inserted", "key_id"):
+            if hasattr(request.state, field):
+                extra[field] = getattr(request.state, field)
+        level = logs.logging.ERROR if status >= 500 else logs.logging.WARNING if status >= 400 else logs.logging.INFO
+        logs.log.log(level, "request", extra=extra)
+        logs.request_id_var.reset(token)
 
 
 # auto_error=False: we raise our own 401 (+ WWW-Authenticate) instead of FastAPI's default,
@@ -68,14 +101,16 @@ def require_api_key(
     request: Request, creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer)
 ) -> None:
     token = creds.credentials.encode() if creds else b""
-    ok = False
-    for key in request.app.state.api_keys:  # check every key: timing does not reveal which matched
-        ok |= hmac.compare_digest(token, key.encode())
-    if not (creds and ok):
+    matched = None
+    for key in request.app.state.api_keys:  # check every key, no early exit
+        if hmac.compare_digest(token, key.encode()):
+            matched = key
+    if not (creds and matched):
         raise HTTPException(
             status_code=401, detail="invalid or missing API key",
             headers={"WWW-Authenticate": "Bearer"},  # required on 401 (RFC 9110)
         )
+    request.state.key_id = logs.key_id(matched)  # fingerprint for the log, never the key
 
 
 def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
@@ -105,9 +140,13 @@ class ReceiptAck(BaseModel):
         401: {"description": "Missing or invalid API key (the agent's sink spools and retries)"},
     },
 )
-def post_receipt(run: RunIn, response: Response, conn: sqlite3.Connection = Depends(get_conn)) -> ReceiptAck:
+def post_receipt(
+    run: RunIn, request: Request, response: Response, conn: sqlite3.Connection = Depends(get_conn)
+) -> ReceiptAck:
+    request.state.task_id = run.task_id
     run_row, tool_rows = run.to_rows()
     created = store.insert_run(conn, run_row, tool_rows, source="api")
+    request.state.inserted = created
     if not created:
         response.status_code = 200
     return ReceiptAck(task_id=run.task_id, created=created)

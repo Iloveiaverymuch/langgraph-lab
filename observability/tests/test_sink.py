@@ -208,3 +208,10 @@ def test_wrong_key_then_fixed_key_flushes_spool_in_order(env, api, monkeypatch):
     assert [b["task_id"] for b in api.bodies[n:]] == ["run-1", "run-2", "run-3"]
     assert all(h.get("Authorization") == f"Bearer {KEY}" for h in api.headers[n:])
     assert _spool_lines() == []
+
+
+def test_request_id_header_is_the_task_id(env, api, monkeypatch):
+    monkeypatch.setenv("SENTINEL_API_URL", api.url)
+    assert sink.record(_run("run-xyz"), _tools("run-xyz")) == "stored"
+    headers = {k.lower(): v for k, v in api.headers[-1].items()}  # header names are case-insensitive
+    assert headers.get("x-request-id") == "run-xyz"

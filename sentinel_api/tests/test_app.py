@@ -1,4 +1,6 @@
 """Offline tests for POST /receipts (temp SQLite via SENTINEL_DB; no network)."""
+import hashlib
+import json
 import sqlite3
 
 import pytest
@@ -134,3 +136,55 @@ def test_openapi_declares_bearer_scheme(client):
     schemes = spec["components"]["securitySchemes"]
     assert any(s.get("scheme", "").lower() == "bearer" for s in schemes.values())
     assert "401" in spec["paths"]["/receipts"]["post"]["responses"]
+
+
+# --- W3.5A D3 step 3: canonical JSON log line, allowlisted fields ---
+
+def log_lines(capsys):
+    return [json.loads(ln) for ln in capsys.readouterr().out.splitlines() if ln.startswith("{")]
+
+
+def test_one_json_line_per_request_with_correlation(client, capsys):
+    r = client.post("/receipts", json=GOOD, headers={"X-Request-ID": GOOD["task_id"]})
+    assert r.status_code == 201 and r.headers["x-request-id"] == GOOD["task_id"]
+    (line,) = [ln for ln in log_lines(capsys) if ln["event"] == "request"]
+    assert line["request_id"] == GOOD["task_id"] and line["task_id"] == GOOD["task_id"]
+    assert (line["method"], line["path"], line["status"], line["inserted"]) == ("POST", "/receipts", 201, True)
+    assert line["key_id"] == hashlib.sha256(NEW_KEY.encode()).hexdigest()[:8]
+    assert line["level"] == "INFO" and isinstance(line["latency_ms"], float)
+
+
+@pytest.mark.parametrize("sent", [None, "bad id with spaces", "x" * 129])
+def test_missing_or_malformed_request_id_is_replaced(client, capsys, sent):
+    headers = {"X-Request-ID": sent} if sent else {}
+    r = client.get("/health", headers=headers)
+    rid = r.headers["x-request-id"]
+    assert rid != sent and len(rid) == 32
+    assert log_lines(capsys)[-1]["request_id"] == rid
+
+
+def test_401_line_has_no_key_id_and_no_secret(anon, capsys):
+    anon.post("/receipts", json=GOOD, headers={"Authorization": "Bearer wrong-key-value"})
+    out = capsys.readouterr().out
+    line = json.loads([ln for ln in out.splitlines() if ln.startswith("{")][-1])
+    assert line["status"] == 401 and line["level"] == "WARNING"
+    assert "key_id" not in line and "task_id" not in line
+    assert "wrong-key-value" not in out and "Bearer" not in out
+
+
+def test_valid_key_never_reaches_the_logs(client, capsys):
+    client.post("/receipts", json=GOOD)
+    client.post("/receipts", json={"junk": 1})
+    out = capsys.readouterr().out
+    assert NEW_KEY not in out and OLD_KEY not in out and "Authorization" not in out
+
+
+def test_500_is_logged_as_error_with_request_id(db, capsys):
+    with TestClient(app, raise_server_exceptions=False, headers=AUTH) as c:
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TRIGGER boom BEFORE INSERT ON tool_calls BEGIN SELECT RAISE(ABORT, 'boom'); END;")
+        conn.commit()
+        conn.close()
+        c.post("/receipts", json=GOOD, headers={"X-Request-ID": "req-500"})
+    line = [ln for ln in log_lines(capsys) if ln["event"] == "request"][-1]
+    assert (line["status"], line["level"], line["request_id"]) == (500, "ERROR", "req-500")
